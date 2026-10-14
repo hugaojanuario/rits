@@ -1,0 +1,326 @@
+pub mod db;
+pub mod store;
+pub mod tools;
+pub mod fsx;
+pub mod procs;
+mod ide;
+
+use db::{ColumnInfo, CompletionTable, DbObject, IndexInfo, QueryResult, ServerInfo, Session, Sessions};
+use store::ConnConfig;
+use tauri::{AppHandle, Manager, State};
+
+const META: &str = "meta";
+
+async fn session(
+    app: &AppHandle,
+    st: &Sessions,
+    conn_id: &str,
+    db: &str,
+    channel: &str,
+) -> Result<std::sync::Arc<tokio::sync::Mutex<Session>>, String> {
+    let cfg = store::get(app, conn_id)?;
+    st.get(&cfg, db, channel).await
+}
+
+// ---------- connection profiles ----------
+
+#[tauri::command]
+fn list_connections(app: AppHandle) -> Result<Vec<ConnConfig>, String> {
+    store::load(&app)
+}
+
+#[tauri::command]
+async fn save_connection(app: AppHandle, st: State<'_, Sessions>, cfg: ConnConfig) -> Result<(), String> {
+    let mut all = store::load(&app)?;
+    match all.iter_mut().find(|c| c.id == cfg.id) {
+        Some(c) => *c = cfg.clone(),
+        None => all.push(cfg.clone()),
+    }
+    store::save_all(&app, &all)?;
+    st.drop_conn(&cfg.id).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_connection(app: AppHandle, st: State<'_, Sessions>, id: String) -> Result<(), String> {
+    let mut all = store::load(&app)?;
+    all.retain(|c| c.id != id);
+    store::save_all(&app, &all)?;
+    st.drop_conn(&id).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn test_connection(cfg: ConnConfig) -> Result<ServerInfo, String> {
+    let s = Session::open(&cfg, &cfg.default_db()).await?;
+    match &s {
+        Session::Pg(c) => c.server_info().await,
+        Session::My(c) => c.server_info().await,
+    }
+}
+
+#[tauri::command]
+async fn connect(app: AppHandle, st: State<'_, Sessions>, conn_id: String) -> Result<ServerInfo, String> {
+    let s = session(&app, &st, &conn_id, "", META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.server_info().await,
+        Session::My(c) => c.server_info().await,
+    }
+}
+
+#[tauri::command]
+async fn disconnect(st: State<'_, Sessions>, conn_id: String) -> Result<(), String> {
+    st.drop_conn(&conn_id).await;
+    Ok(())
+}
+
+// ---------- metadata ----------
+
+#[tauri::command]
+async fn list_databases(app: AppHandle, st: State<'_, Sessions>, conn_id: String) -> Result<Vec<String>, String> {
+    let s = session(&app, &st, &conn_id, "", META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.databases().await,
+        Session::My(c) => c.databases().await,
+    }
+}
+
+#[tauri::command]
+async fn list_schemas(app: AppHandle, st: State<'_, Sessions>, conn_id: String, db: String) -> Result<Vec<String>, String> {
+    let s = session(&app, &st, &conn_id, &db, META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.schemas().await,
+        Session::My(_) => Ok(vec![db]),
+    }
+}
+
+#[tauri::command]
+async fn list_objects(
+    app: AppHandle,
+    st: State<'_, Sessions>,
+    conn_id: String,
+    db: String,
+    schema: String,
+) -> Result<Vec<DbObject>, String> {
+    let s = session(&app, &st, &conn_id, &db, META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.objects(&schema).await,
+        Session::My(c) => c.objects(&schema).await,
+    }
+}
+
+#[tauri::command]
+async fn list_columns(
+    app: AppHandle,
+    st: State<'_, Sessions>,
+    conn_id: String,
+    db: String,
+    schema: String,
+    table: String,
+) -> Result<Vec<ColumnInfo>, String> {
+    let s = session(&app, &st, &conn_id, &db, META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.columns(&schema, &table).await,
+        Session::My(c) => c.columns(&schema, &table).await,
+    }
+}
+
+#[tauri::command]
+async fn list_indexes(
+    app: AppHandle,
+    st: State<'_, Sessions>,
+    conn_id: String,
+    db: String,
+    schema: String,
+    table: String,
+) -> Result<Vec<IndexInfo>, String> {
+    let s = session(&app, &st, &conn_id, &db, META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.indexes(&schema, &table).await,
+        Session::My(c) => c.indexes(&schema, &table).await,
+    }
+}
+
+#[tauri::command]
+async fn get_ddl(
+    app: AppHandle,
+    st: State<'_, Sessions>,
+    conn_id: String,
+    db: String,
+    schema: String,
+    name: String,
+    kind: String,
+) -> Result<String, String> {
+    let s = session(&app, &st, &conn_id, &db, META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.ddl(&schema, &name, &kind).await,
+        Session::My(c) => c.ddl(&schema, &name, &kind).await,
+    }
+}
+
+#[tauri::command]
+async fn completion_info(
+    app: AppHandle,
+    st: State<'_, Sessions>,
+    conn_id: String,
+    db: String,
+) -> Result<Vec<CompletionTable>, String> {
+    let s = session(&app, &st, &conn_id, &db, META).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.completion().await,
+        Session::My(c) => c.completion(&db).await,
+    }
+}
+
+// ---------- execution ----------
+
+#[tauri::command]
+async fn execute(
+    app: AppHandle,
+    st: State<'_, Sessions>,
+    conn_id: String,
+    db: String,
+    channel: String,
+    sql: String,
+) -> Result<Vec<QueryResult>, String> {
+    let s = session(&app, &st, &conn_id, &db, &channel).await?;
+    let s = s.lock().await;
+    match &*s {
+        Session::Pg(c) => c.execute(&sql).await,
+        Session::My(c) => c.execute(&sql).await,
+    }
+}
+
+#[tauri::command]
+async fn cancel_query(st: State<'_, Sessions>, conn_id: String, db: String, channel: String) -> Result<(), String> {
+    st.cancel(&conn_id, &db, &channel).await
+}
+
+#[tauri::command]
+async fn close_channel(st: State<'_, Sessions>, conn_id: String, db: String, channel: String) -> Result<(), String> {
+    st.drop_channel(&conn_id, &db, &channel).await;
+    Ok(())
+}
+
+// ---------- backup / restore ----------
+
+#[tauri::command]
+async fn detect_tools(app: AppHandle, conn_id: String) -> Result<Vec<tools::ToolStatus>, String> {
+    let cfg = store::get(&app, &conn_id)?;
+    Ok(tools::detect(&cfg).await)
+}
+
+#[tauri::command]
+async fn run_task(app: AppHandle, spec: tools::TaskSpec) -> Result<i32, String> {
+    let cfg = store::get(&app, &spec.conn_id)?;
+    tools::run(app, cfg, spec).await
+}
+
+// ---------- files & documents ----------
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
+}
+
+#[tauri::command]
+fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| format!("{path}: {e}"))
+}
+
+#[tauri::command]
+fn load_doc(app: AppHandle, key: String) -> Result<serde_json::Value, String> {
+    store::read_doc(&app, &key)
+}
+
+#[tauri::command]
+fn save_doc(app: AppHandle, key: String, value: serde_json::Value) -> Result<(), String> {
+    store::write_doc(&app, &key, &value)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            store::migrate_legacy(app.handle());
+            Ok(())
+        })
+        .manage(Sessions::default())
+        .manage(fsx::Watchers::default())
+        .manage(procs::Procs::default())
+        .manage(procs::Terms::default())
+        .invoke_handler(tauri::generate_handler![
+            list_connections,
+            save_connection,
+            delete_connection,
+            test_connection,
+            connect,
+            disconnect,
+            list_databases,
+            list_schemas,
+            list_objects,
+            list_columns,
+            list_indexes,
+            get_ddl,
+            completion_info,
+            execute,
+            cancel_query,
+            close_channel,
+            detect_tools,
+            run_task,
+            read_text_file,
+            write_text_file,
+            load_doc,
+            save_doc,
+            ide::fs_list,
+            ide::fs_read,
+            ide::fs_write,
+            ide::fs_create,
+            ide::fs_rename,
+            ide::fs_delete,
+            ide::fs_copy,
+            ide::fs_exists,
+            ide::fs_files,
+            ide::fs_search,
+            ide::fs_watch,
+            ide::fs_unwatch,
+            ide::reveal_in_explorer,
+            ide::proc_spawn,
+            ide::proc_connect,
+            ide::proc_write,
+            ide::proc_close_stdin,
+            ide::proc_kill,
+            ide::run_capture,
+            ide::which,
+            ide::free_port,
+            ide::env_info,
+            ide::pty_open,
+            ide::pty_write,
+            ide::pty_resize,
+            ide::pty_close,
+            ide::window_reset
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building Rits")
+        .run(|app, event| {
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
+                let procs = app.state::<procs::Procs>();
+                tauri::async_runtime::block_on(procs.kill_owner(label));
+                procs::pty_close_owner(&app.state::<procs::Terms>(), label);
+            }
+            if let tauri::RunEvent::Exit = event {
+                // Do not leave language servers, debuggers or programs running.
+                let procs = app.state::<procs::Procs>();
+                tauri::async_runtime::block_on(procs.kill_all());
+            }
+        });
+}
