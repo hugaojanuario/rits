@@ -80,7 +80,13 @@ jobs:
       - name: Validar comandos do Windows
         if: matrix.platform == 'windows'
         shell: powershell
-        run: node dev/windows-smoke.mjs
+        run: |
+          $smokeAppData = Join-Path $env:RUNNER_TEMP 'rits-docker-fixture'
+          $smokeDesktop = Join-Path $smokeAppData 'Programs\DockerDesktop\Docker Desktop.exe'
+          New-Item -ItemType Directory -Path (Split-Path $smokeDesktop) -Force | Out-Null
+          New-Item -ItemType File -Path $smokeDesktop -Force | Out-Null
+          $env:LOCALAPPDATA = $smokeAppData
+          node dev/windows-smoke.mjs
       - name: Gerar instalador nativo
         run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
       - name: Testar backend
