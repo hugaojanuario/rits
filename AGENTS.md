@@ -6,12 +6,13 @@ Este arquivo explica **o que é o projeto, como ele está organizado, como rodar
 
 ## 1. O que é o Rits
 
-Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados** e infraestrutura (Docker, Terraform, Kubernetes). Em termos de plataforma, é uma IDE para **Python**, **Go** e **bancos de dados** (PostgreSQL e MySQL/MariaDB), para Windows 11 e macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
+Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados**, infraestrutura (Docker, Terraform, Kubernetes) e orquestração (Apache Airflow, como plugin). Roda no Windows 11 e no macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
 
 - **Visual**: copia o *layout* e o *look* das IDEs JetBrains com o tema **Islands** (Dark/Light): barra principal com widget de projeto, widget de branch e widget de execução, faixas de tool windows nas laterais, painéis em "ilhas" arredondadas e barra de status com breadcrumbs.
 - **Código**: editor CodeMirror 6 com servidores de linguagem (LSP), execução, testes, depuração (DAP), terminal real (PTY), Git e navegação no estilo IntelliJ.
 - **Banco de dados**: explorador de conexões, console SQL, editor de dados, DDL, diagrama ER, exportação e backup/restore com as ferramentas nativas (`pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`), no estilo do DBeaver. PostgreSQL e MySQL/MariaDB têm driver embutido; SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse e MongoDB baixam o driver na primeira conexão (seção 5.7).
-- **Leve**: Tauri 2 com o WebView2 do sistema, sem Chromium embutido. O instalador NSIS tem cerca de 3,5 MB, o exe cerca de 7 MB, e o processo principal usa cerca de 30 MB de RAM.
+- **Leve**: Tauri 2 com o WebView do sistema (WebView2 no Windows, WKWebView no macOS), sem Chromium embutido. O instalador NSIS tem cerca de 3,5 MB, o exe cerca de 7 MB, o `Rits.app` cerca de 7,6 MB, e o processo principal usa cerca de 30 MB de RAM.
+- **Plugins opcionais**: Docker e Apache Airflow são ativados em Configurações › Plugins. Desativados, não carregam código nem fazem requisições.
 
 A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos visíveis ao usuário em pt-BR, e comentários de código e identificadores em inglês, como no resto do código.
 
@@ -27,7 +28,7 @@ A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos 
 | Camada | Tecnologia |
 |---|---|
 | Runtime | Tauri 2 (janela **sem moldura**: `decorations: false`; a barra de título é desenhada pelo app) |
-| Backend | Rust 2021: `tokio`, `tokio-postgres` (+ `postgres-native-tls`), `mysql_async`, `portable-pty` (ConPTY), `notify`, `ignore`, `regex`, `trash`, `encoding_rs` |
+| Backend | Rust 2021: `tokio`, `tokio-postgres` (+ `postgres-native-tls`), `mysql_async`, `portable-pty` (ConPTY), `notify`, `ignore`, `regex`, `trash`, `encoding_rs`, `reqwest` (`native-tls`, cliente do Airflow), `keyring` (cofre do sistema), `getrandom`/`base64` (segredos do ambiente local) |
 | Frontend | TypeScript **sem framework** (nada de React/Vue), Vite, DOM puro com o helper `h()` |
 | Editor | CodeMirror 6 (`@codemirror/*`), `@codemirror/lsp-client`, `@codemirror/merge` (diff), `@codemirror/legacy-modes` |
 | Terminal | `@xterm/xterm` + `@xterm/addon-fit` |
@@ -94,6 +95,11 @@ O app real só roda dentro do Tauri, porque o `invoke` não existe num navegador
 2. Conecte via Chrome DevTools Protocol (`http://127.0.0.1:9222/json`, depois `Runtime.evaluate`) e use `window.__wb`, que é a instância do `Workbench` exposta pelo `main.ts`. Exemplos: `__wb.editors.openFile(path)`, `__wb.runner.runCurrentFile(false)`, `__wb.lsp.diagnostics`, `__wb.debugger.state`.
 3. Para capturar a tela, use `PrintWindow` (user32), que funciona mesmo quando o shell não tem acesso ao desktop. `CopyFromScreen` falha nesse caso.
 
+**No macOS** o WKWebView não fala o Chrome DevTools Protocol. Há três caminhos:
+- **Inspeção manual**: no `tauri dev`, clique com o botão direito › Inspecionar (Web Inspector do Safari).
+- **Roteiro temporário dentro do app real**: um módulo de teste carregado por `import()` no `main.ts` só quando uma variável `VITE_*` estiver definida, que recebe o `Workbench`, executa o fluxo e grava o resultado num arquivo com `host.write`. É o único jeito de exercitar Keychain, processos e janelas Tauri de verdade. **Apague o módulo e o gancho no `main.ts` antes de commitar.**
+- **Interface num navegador headless** (Chrome/Brave com `--remote-debugging-port`) servida pelo Vite, com o `invoke` substituído por chamadas a um serviço real (por exemplo, um proxy para o Airflow). Serve para validar telas contra dados reais, não o backend Rust.
+
 `dev/mock.html` com `dev/tauri-mock.ts` simula **só a parte de banco** num navegador comum, para mexer em CSS. Os comandos da IDE não são simulados, então a parte de código não funciona ali.
 
 ---
@@ -152,6 +158,7 @@ src/
   assets/icons/            SVGs do expui (Apache 2.0) com variantes _dark e @20x20
 src-tauri/
   tauri.conf.json          productName "Rits", identifier "dev.rits.ide", janela sem moldura
+  tauri.macos.conf.json    sobreposição do macOS: app/dmg, barra Overlay, Liquid Glass (seção 3.1)
   capabilities/default.json permissões (janelas "main" e "project-*"; window controls; criar webview; dialog)
   src/main.rs              chama rits_lib::run()
   src/lib.rs               comandos de banco + registro de TODOS os comandos + setup (migração) + limpeza ao fechar
@@ -202,13 +209,13 @@ O `host.ts` registra **um** listener Tauri por evento e distribui por `id` com `
 
 **Tool windows**: `wb.register({id, title, icon, anchor: "left"|"right"|"bottom", shortcut, body, headerTabs?, actions?, onShow?})`. Há uma visível por lado (`show`, `hide`, `toggle`, `isVisible`). O cabeçalho é refeito por `refreshHeader(id)`, e `setBadge(id, bool)` acende o ponto vermelho na faixa. O nome do ícone é o arquivo em `assets/icons/toolwindows/<nome>@20x20.svg` (ou um ícone próprio do `icons.ts`).
 
-IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, direita), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12) e `docker` (só com o plugin, embaixo à direita).
+IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, direita), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12), `docker` (só com o plugin, embaixo à direita) e `airflow` (só com o plugin, à direita).
 
 **Posição das tool windows**: os botões das faixas podem ser arrastados (`stripeDrag`/`stripeDropAt`) para quatro zonas: topo da esquerda, topo da direita e os grupos de baixo de cada faixa (`anchor: "bottom"` com `side`). A ordem fica em `order`. A posição é salva no `localStorage` `toolLayout` (global, vale para todos os projetos) e aplicada no `register()`. O menu ⋮ de cada janela tem "Mover para…" e "Restaurar layout padrão". `unregister(id)` remove uma janela (usado pelos plugins opcionais).
 
 **Keymaps** (`keymap.ts`): `keymapId()` é `"vscode"` (padrão no macOS) ou `"jetbrains"` (padrão no Windows), no `localStorage` `keymap`. Os menus continuam escritos com rótulos JetBrains ("Ctrl" = ⌘ no Mac); `displayShortcut()` traduz para o keymap ativo e desenha ⌃⌥⇧⌘ no macOS (o `ui.ts` aplica isso em `contextMenu` e `popupList`). No modo VS Code, `Workbench.vscodeKey()` trata os atalhos globais antes dos JetBrains (incluindo o acorde ⌘K). Os do editor ficam em `CodeEditor.keymap()`, embrulhados em `jb()`/`vs()`, que checam o keymap na hora da tecla. Atalho novo: inclua nos dois keymaps e no `VS`/`keymapTable()`. Para letras use `e.code` (o Option do Mac altera o `e.key`).
 
-**Plugins opcionais**: o Docker não é instalado no interpretador; ele é "ativado" (`localStorage` `plugin.docker`). `setDockerEnabled()` emite `rits-plugins`, e `Workbench.syncPlugins()` cria ou descarta o `DockerTools`. A janela usa `docker ps/images/volume ls --format "{{json .}}"`, agrupa pelo label `com.docker.compose.project`, atualiza ao vivo com um processo `docker events` e mostra `docker stats` a cada 5 s, só quando a janela está visível. Logs e o shell no container abrem como abas do Terminal (`docker logs -f`, `docker exec -it`).
+**Plugins opcionais**: o Docker não é instalado no interpretador; ele é "ativado" (`localStorage` `plugin.docker`). `setDockerEnabled()` emite `rits-plugins`, e `Workbench.syncPlugins()` cria ou descarta o `DockerTools`. A janela usa `docker ps/images/volume ls --format "{{json .}}"`, agrupa pelo label `com.docker.compose.project`, atualiza ao vivo com um processo `docker events` e mostra `docker stats` a cada 5 s, só quando a janela está visível. Logs e o shell no container abrem como abas do Terminal (`docker logs -f`, `docker exec -it`). O plugin Airflow segue o mesmo padrão (`plugin.airflow`, `airflow/plugin.ts`), mas é carregado por `import()` dinâmico; veja 5.9.
 
 **Trocar de projeto**: `wb.openProject(path)` pergunta "Esta janela / Nova janela" (a escolha pode ser lembrada no `localStorage` `openProjectIn`). "Esta janela" chama `prepareClose()` (salva, para execuções, depuração, terminais e servidores LSP) e navega para `index.html?project=<path>`. "Nova janela" cria um `WebviewWindow` com label `project-<id>`. Sem `?project`, o `main.ts` reabre o projeto mais recente; com `?welcome=1`, mostra a tela de boas-vindas.
 
@@ -251,8 +258,9 @@ O backup e o restore montam argumentos em `tools.rs` (`pg_plan`/`my_plan`, que s
 **Diagrama ER** (`diagram.ts` + comando `diagram_info`): uma consulta por schema (colunas com PK e FKs). Cartões HTML num "mundo" com `transform`, ligações SVG com pé de galinha, layout em camadas (pais à esquerda), arrastar, pan/zoom (roda = pan, Ctrl/⌘ + roda ou pinça = zoom), minimapa, busca e destaque das relações. As posições ficam no `localStorage` `diagram:<conn>:<db>:<schema>`. No MongoDB as relações são inferidas de campos `<coleção>Id` do tipo ObjectId.
 
 ### 5.8 Persistência
-Na pasta de configuração `%APPDATA%\dev.rits.ide\` ficam:
-- `connections.json`: conexões de banco (**senhas em texto puro**; há uma melhoria pendente para usar o Windows Credential Manager);
+Na pasta de configuração (`%APPDATA%\dev.rits.ide\` no Windows, `~/Library/Application Support/dev.rits.ide/` no macOS) ficam:
+- `connections.json`: conexões de banco (**senhas em texto puro**; melhoria pendente: migrá-las para o cofre do sistema de `airflow/secrets.rs`, já usado pelo Airflow);
+- `airflow-instances.json` e `airflow-envs.json`: instâncias e ambientes locais do Airflow (**sem** senhas nem tokens, que ficam no cofre do sistema); `airflow-envs/<slug>/compose.yaml`: o compose de cada ambiente local (fora do projeto e do Git);
 - `history.json`: histórico SQL; `recentProjects.json`: projetos recentes; `project-<…>.json`: `ProjectSettings` de cada projeto (layout, arquivos abertos, breakpoints, configurações de execução, interpretador, pastas expandidas, consoles).
 
 Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no `localStorage`; sempre envolva o acesso em `try/catch`. Quando o app se chamava "Beaver Grip", o identificador era `dev.beavergrip.app`; `store::migrate_legacy` copia esses arquivos uma única vez.
@@ -285,7 +293,7 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 - TypeScript `strict` e `noUnusedLocals`: o `tsc` precisa passar sem erros.
 
 **Backend**
-- Comandos Tauri retornam `Result<T, String>` com mensagens em pt-BR para o usuário. Todo comando novo precisa ser registrado em `generate_handler!` (`lib.rs`), ganhar um wrapper em `src/ide/host.ts` ou `src/api.ts` e, se usar uma API de janela ou webview, uma permissão em `capabilities/default.json`.
+- Comandos Tauri retornam `Result<T, String>` com mensagens em pt-BR para o usuário. Exceção: os do Airflow retornam `AfError {kind, status, message}`, para a UI distinguir autenticação, permissão, servidor fora do ar e TLS. Todo comando novo precisa ser registrado em `generate_handler!` (`lib.rs`), ganhar um wrapper em `src/ide/host.ts` ou `src/api.ts` e, se usar uma API de janela ou webview, uma permissão em `capabilities/default.json`.
 - Processos filhos sempre com `hidden()` (`CREATE_NO_WINDOW`), senão uma janela de console pisca.
 - Nada de `unwrap()` em caminho que o usuário alcança; prefira `map_err(|e| e.to_string())`.
 - Leitura de stream: use `read_text_chunks`/`read_rpc_messages`, que já tratam UTF-8 partido e mensagens fragmentadas e são testados.
@@ -304,6 +312,8 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 
 **Adicionar uma tool window**: crie uma classe que recebe `wb`, chame `wb.register({...})` no construtor, instancie em `Workbench.mount()`, ponha o atalho em `installKeys()` e acrescente o item em "Exibir › Janelas de ferramentas", que é gerado sozinho.
 
+**Adicionar um plugin opcional**: siga o Airflow. Um módulo de entrada leve (`enabled()`/`setEnabled()` no `localStorage`, que emitem `rits-plugins`), um card em Configurações › Plugins, o carregamento e o `dispose()` em `Workbench.syncPlugins()` e `unregister()` da tool window. O resto vai por `import()` dinâmico, para não pesar a IDE de quem não usa. O `dispose()` precisa parar timers, processos e requisições.
+
 **Adicionar uma ação**: inclua em `actions()` de `search.ts` (para aparecer em Ctrl+Shift+A e no Shift duplo) e, se couber, no `mainMenu()` de `workbench.ts`.
 
 **Mudar o visual**: ajuste os tokens no topo de `styles.css` para os **dois** temas e confira no app real (seção 3) com Islands Dark e Islands Light.
@@ -318,6 +328,9 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 - **O `python` do PATH pode ser o atalho falso da Microsoft Store** (`WindowsApps`). `sdk.findInterpreters()` o ignora; nunca dependa de `python` sem caminho.
 - **Ferramentas instaladas depois que o app abriu** não aparecem no PATH do processo. Por isso o `which`/PATH aumentado incluem as pastas padrão do Go e do Python.
 - **`go run` cria um processo filho**: parar a execução exige matar a árvore (`kill_tree`), e já é assim.
+- **`reqwest` 0.13 sem features padrão** não tem `.query()`: o cliente do Airflow monta a query com `encode_query` (`client.rs`). Para caminhos da API, codifique cada segmento (`encodeURIComponent`), porque os `run_id` têm `:` e `+`.
+- **Nunca repita automaticamente uma ação do Airflow** (disparo, limpeza, pausa): um timeout não significa que o servidor não executou. A única repetição permitida é o novo login depois de um 401.
+- **`docker compose config` imprime os segredos** injetados pelo ambiente: o `airflow_env_compose` não aceita esse subcomando. Não o libere.
 - **O debugpy formata o JSON com espaços** (`"success": true`): faça parse do JSON, não compare strings.
 - **Janela sem moldura**: arrastar usa `data-tauri-drag-region` e `startDragging()`; os botões minimizar, maximizar e fechar estão em `renderToolbar()`. Fechar passa por `prepareClose()` para não deixar processos órfãos.
 - **Bundle grande (~1,5 MB de JS)**: é aceitável num app local; o aviso do Vite pode ser ignorado.
