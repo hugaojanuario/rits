@@ -27,7 +27,7 @@ export function isK8s(text: string) {
 export const INFRA_LABEL: Record<InfraKind, string> = { dockerfile: "Dockerfile", compose: "Docker Compose", terraform: "Terraform", k8s: "Kubernetes" };
 export const INFRA_ICON: Record<InfraKind, string> = { dockerfile: "docker", compose: "containerStack", terraform: "terraform", k8s: "k8s" };
 
-const q = (s: string) => (/^[\w./:@-]+$/.test(s) ? s : `"${s.replace(/"/g, '\\"')}"`);
+const q = (s: string) => (/^[\w./:@-]+$/.test(s) ? s : IS_WIN ? `'${s.replace(/'/g, "''")}'` : `'${s.replace(/'/g, "'\\''")}'`);
 
 /** "a && b" for the terminal shell: Windows PowerShell 5.1 has no && (nor < redirection). */
 const then = (a: string, b: string) => (IS_WIN ? `${a}; if ($?) { ${b} }` : `${a} && ${b}`);
@@ -74,7 +74,7 @@ export function infraActions(wb: Workbench, path: string, kind: InfraKind): (Men
             if (tag) term(wb, dir, then(`docker build -f ${file} -t ${q(tag)} .`, `docker run --rm -it ${q(tag)}`));
           },
         },
-        { label: "Analisar com hadolint", icon: "general/show", action: () => term(wb, dir, IS_WIN ? `Get-Content ${file} | docker run --rm -i hadolint/hadolint` : `docker run --rm -i hadolint/hadolint < ${file}`) },
+        { label: "Analisar com hadolint", icon: "general/show", action: () => term(wb, dir, IS_WIN ? `& { $OutputEncoding = [System.Text.UTF8Encoding]::new(); Get-Content -LiteralPath ${file} -Encoding UTF8 | docker run --rm -i hadolint/hadolint }` : `docker run --rm -i hadolint/hadolint < ${file}`) },
       ];
     case "terraform":
       return [

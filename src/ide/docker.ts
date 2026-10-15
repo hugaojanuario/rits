@@ -44,7 +44,11 @@ const startEngine = () =>
   IS_MAC
     ? { program: "open", args: ["-a", "Docker"] }
     : IS_WIN
-      ? { program: "cmd", args: ["/c", "start", "", "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"] }
+      ? {
+          program: "powershell.exe",
+          args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+            "$ErrorActionPreference = 'Stop'; $paths = @((Join-Path $env:LOCALAPPDATA 'Programs\\DockerDesktop\\Docker Desktop.exe'), (Join-Path $env:ProgramFiles 'Docker\\Docker\\Docker Desktop.exe')); $app = $paths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1; if (-not $app) { throw 'Docker Desktop não encontrado. Instale-o em Configurações › Plugins.' }; Start-Process -FilePath $app -WindowStyle Hidden"],
+        }
       : { program: "systemctl", args: ["--user", "start", "docker-desktop"] };
 
 /** Components shown on the plugin card. */
@@ -193,20 +197,28 @@ export class DockerTools {
       this.stopEvents();
       return this.render();
     }
-    const [c, i, vol] = await Promise.all([
-      docker(["ps", "-a", "--format", "{{json .}}"]),
-      docker(["images", "--format", "{{json .}}"]),
-      docker(["volume", "ls", "--format", "{{json .}}"]),
-    ]);
-    this.containers = jsonLines<Container>(c.stdout).map((x) => ({
-      ...x,
-      project: label(x.Labels, "com.docker.compose.project"),
-      service: label(x.Labels, "com.docker.compose.service"),
-    }));
-    this.images = jsonLines<Image>(i.stdout);
-    this.volumes = jsonLines<Volume>(vol.stdout);
-    this.state = "ok";
-    this.startEvents();
+    try {
+      const [c, i, vol] = await Promise.all([
+        docker(["ps", "-a", "--format", "{{json .}}"]),
+        docker(["images", "--format", "{{json .}}"]),
+        docker(["volume", "ls", "--format", "{{json .}}"]),
+      ]);
+      const failed = [c, i, vol].find((r) => r.code !== 0);
+      if (failed) throw new Error(failed.stderr.trim() || failed.stdout.trim() || `Docker terminou com código ${failed.code}`);
+      this.containers = jsonLines<Container>(c.stdout).map((x) => ({
+        ...x,
+        project: label(x.Labels, "com.docker.compose.project"),
+        service: label(x.Labels, "com.docker.compose.service"),
+      }));
+      this.images = jsonLines<Image>(i.stdout);
+      this.volumes = jsonLines<Volume>(vol.stdout);
+      this.state = "ok";
+      this.startEvents();
+    } catch (e) {
+      this.state = "no-engine";
+      this.error = String((e as Error)?.message ?? e);
+      this.stopEvents();
+    }
     this.render();
   }
 
@@ -539,7 +551,12 @@ export class DockerTools {
 
   private async startEngine() {
     const s = startEngine();
-    await host.capture(s.program, s.args, "", undefined, 20).catch(() => null);
+    try {
+      const r = await host.capture(s.program, s.args, "", undefined, 20);
+      if (r.code !== 0) return notify("Falha ao iniciar o Docker", r.stderr.trim() || r.stdout.trim(), "error");
+    } catch (e) {
+      return notify("Falha ao iniciar o Docker", String(e), "error");
+    }
     toast("Iniciando o Docker… a lista atualiza quando o Engine responder.");
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 2000));

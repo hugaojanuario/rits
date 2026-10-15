@@ -109,6 +109,8 @@ brew install python go libpq mysql-client
 
 `npm run tauri build` produces the NSIS installer (about 3.5 MB) in `src-tauri/target/release/bundle/nsis/`.
 
+Plugins also find tools in the standard npm and WinGet folders, including tools installed after opening the IDE. Docker Desktop may be installed for the current user or in Program Files. Infrastructure actions work in PowerShell 5.1 and 7, including filenames with spaces and special characters. Liquid Glass is exclusive to macOS; Windows uses Islands Dark or Light.
+
 ## Getting started
 
 1. **Open a folder** or create a project (Python with `.venv`, Go with `go mod init`, or empty).

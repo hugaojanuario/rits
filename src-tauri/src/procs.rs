@@ -138,8 +138,21 @@ pub fn default_tool_dirs() -> Vec<PathBuf> {
         v.push(home.join(".local").join("bin"));
     }
     if cfg!(windows) {
-        v.push(PathBuf::from(r"C:\Program Files\Go\bin"));
-        v.push(PathBuf::from(r"C:\Program Files\Git\cmd"));
+        let programs = PathBuf::from(std::env::var_os("ProgramFiles").unwrap_or_else(|| r"C:\Program Files".into()));
+        v.push(programs.join("Go").join("bin"));
+        v.push(programs.join("Git").join("cmd"));
+        v.push(programs.join("nodejs"));
+        v.push(programs.join("Docker").join("Docker").join("resources").join("bin"));
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            let local = PathBuf::from(local);
+            v.push(local.join("Programs").join("DockerDesktop").join("resources").join("bin"));
+            v.push(local.join("Programs").join("nodejs"));
+            v.push(local.join("Microsoft").join("WinGet").join("Links"));
+            v.push(local.join("Microsoft").join("WindowsApps"));
+        }
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            v.push(PathBuf::from(appdata).join("npm"));
+        }
     } else {
         if let Some(home) = std::env::var_os("HOME") {
             let home = PathBuf::from(home);

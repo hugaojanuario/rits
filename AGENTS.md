@@ -50,6 +50,12 @@ cd src-tauri && cargo test # testes rápidos do backend
 
 O `cargo` fica em `%USERPROFILE%\.cargo\bin`. No Git Bash, se ele não estiver no PATH, rode `export PATH="$HOME/.cargo/bin:$PATH"`.
 
+No Windows, a busca de ferramentas e o PATH dos processos incluem também `%APPDATA%\npm`, os links do WinGet, WindowsApps e as pastas padrão do Node.js e Docker Desktop (instalação por usuário ou em Program Files). O botão de iniciar Docker Desktop procura as duas instalações e usa `Start-Process`, sem esperar o aplicativo terminar. Os comandos de infraestrutura enviados ao terminal usam aspas literais do PowerShell, inclusive para nomes com espaços, apóstrofos ou `$`.
+
+Depois de usar a CLI Tauri no Windows, confira o diff de `Cargo.toml`: ela pode remover `macos-private-api` também da dependência específica do macOS. Preserve essa feature no bloco `target.'cfg(target_os = "macos")'.dependencies`, para manter o suporte ao Liquid Glass no Mac.
+
+`node dev/windows-smoke.mjs` valida os comandos gerados no PowerShell 5.1 (argumentos literais, execução condicional, leitura UTF-8 e localização do Docker Desktop) e a recuperação do painel após erro ou timeout na listagem, sem iniciar containers. Requer Windows com Docker Desktop instalado. Para testar o cofre real: `cd src-tauri` e `cargo test --test windows_compat -- --ignored`.
+
 ### 3.1 macOS (Apple Silicon)
 Pré-requisitos: Xcode Command Line Tools, Rust e Node (Homebrew serve). `npm run tauri build` gera `bundle/macos/Rits.app` e `bundle/dmg/Rits_<versão>_aarch64.dmg` com assinatura ad-hoc (`signingIdentity: "-"`), sem notarização.
 
@@ -81,6 +87,7 @@ cd src-tauri && cargo test -- --ignored --test-threads=1
 | `tests/airflow_client.rs` | cliente Airflow contra um servidor HTTP falso: login, cache e renovação do JWT, 401 → um novo login, paginação, 403/500, POST que falha ou estoura o tempo **não** é repetido, detecção de Airflow 2, caminhos permitidos (roda no `cargo test` normal) |
 | `tests/airflow_live.rs` | fluxo completo num Airflow 3 real (`--ignored`; veja 5.9) |
 | `tests/ext_driver.rs` | drivers sob demanda: cria o venv dos drivers numa pasta temporária e conversa com o `rits_driver.py` via `ExtConn` (SQLite, sem download) |
+| `tests/windows_compat.rs` | pastas das ferramentas dos plugins e execução de launchers `.cmd` com caminhos e argumentos acentuados; round-trip no Credential Manager com `--ignored` |
 | `tests/ide_backend.rs` | framing JSON-RPC com escritas picotadas, UTF-8 dividido entre leituras, operações de arquivo (CRLF, BOM, binário, .gitignore, busca), e handshake real com gopls, basedpyright, debugpy e Delve via TCP |
 
 > No MySQL de teste, sempre use `--default-character-set=utf8mb4` ao popular dados pelo `docker exec`. Sem isso o texto acentuado fica com dupla codificação e parece um bug do app, mas não é.

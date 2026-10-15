@@ -35,7 +35,7 @@ const handlers: Record<string, (a: any) => unknown> = {
     if (/nao_existe/.test(s)) throw 'ERROR: relation "nao_existe" does not exist\nPosição: 15';
     return [{ columns: [], rows: [], affected: 3, hasRows: false, truncated: false, elapsedMs: 4 }];
   },
-  detect_tools: () => [{ name: "pg_dump", path: "C:\Program Files\PostgreSQL\17\bin\pg_dump.exe", version: "pg_dump (PostgreSQL) 17.11" }, { name: "pg_restore", path: null, version: null }, { name: "psql", path: null, version: null }],
+  detect_tools: () => [{ name: "pg_dump", path: "C:/Program Files/PostgreSQL/17/bin/pg_dump.exe", version: "pg_dump (PostgreSQL) 17.11" }, { name: "pg_restore", path: null, version: null }, { name: "psql", path: null, version: null }],
   load_doc: (a) => (a.key === "history" ? [{ time: Date.now(), connId: "pg1", db: "loja", sql: "SELECT * FROM vendas.clientes" }] : null),
   save_doc: () => null,
   test_connection: () => ({ version: "PostgreSQL 17.11", currentUser: "postgres" }),
