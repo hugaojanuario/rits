@@ -75,6 +75,8 @@ A versão deve coincidir em `package.json`, nas duas entradas do `package-lock.j
 
 As notas ficam em `.github/release-notes.md`: atualize para cada versão. Para repetir uma execução que falhou, use Re-run jobs ou o `workflow_dispatch` com a mesma tag existente; uma release já publicada não é sobrescrita. O Mac continua com assinatura ad-hoc, sem notarização. Saídas locais de staging ficam em `release-assets/` (ignorado pelo Git).
 
+No CI, execute o Tauri CLI antes dos testes Cargo: o `tauri-build` confere as features da dependência comum, e o CLI sincroniza `macos-private-api` com a configuração da plataforma. Os testes rodam depois do empacotamento e antes do upload/publicação. O teste de comandos Windows usa `shell: powershell`, preparando o PowerShell 5.1 antes dos subprocessos com timeout.
+
 ### Testes de integração (`--ignored`)
 Ficam em `src-tauri/tests/` e precisam de infraestrutura:
 

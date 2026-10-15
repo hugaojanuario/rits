@@ -79,11 +79,12 @@ jobs:
       - run: npm run build
       - name: Validar comandos do Windows
         if: matrix.platform == 'windows'
+        shell: powershell
         run: node dev/windows-smoke.mjs
-      - name: Testar backend
-        run: cargo test --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --locked
       - name: Gerar instalador nativo
         run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+      - name: Testar backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --locked
       - run: node scripts/release.mjs collect ${{ matrix.platform }}
       - uses: actions/upload-artifact@v7
         with:
