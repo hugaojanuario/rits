@@ -1,71 +1,157 @@
-# Rits
+<p align="center">
+  <img src="assets/logo.svg" alt="Rits" width="128" height="128">
+</p>
 
-IDE leve para **Python**, **Go** e **bancos de dados** (PostgreSQL, MySQL/MariaDB), com a interface no estilo das IDEs JetBrains (tema *Islands*). Junta, numa única janela, o fluxo de código do PyCharm/GoLand, as ferramentas de banco do DataGrip e a simplicidade de backup/restore do DBeaver.
+<h1 align="center">Rits</h1>
 
-## Stack
+<p align="center">
+  <b>A IDE leve para engenharia de dados.</b><br>
+  Código Python e Go, SQL em nove bancos (e compatíveis), diagramas ER, Docker, Terraform e Kubernetes, numa janela só.
+</p>
+
+<p align="center">
+  <b>Português</b> · <a href="README.en.md">English</a>
+</p>
+
+---
+
+## O que é o Rits
+
+Um dia de trabalho de engenharia de dados costuma passar por várias ferramentas: o PyCharm para o pipeline em Python, o DataGrip ou o DBeaver para consultar o banco, o Docker Desktop para subir o Postgres local, um terminal para o `terraform plan` e mais um para o `kubectl`.
+
+O **Rits** junta esse fluxo numa IDE desktop rápida e leve:
+
+- **Escreva o pipeline** em Python ou Go, com autocomplete de verdade, depurador, testes e Git.
+- **Consulte e explore os dados** em PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse, DuckDB, SQLite, Firebird, MongoDB e compatíveis (CockroachDB, Supabase, Redshift…).
+- **Entenda o modelo** com diagramas ER gerados do banco, com relações, chaves e layout automático.
+- **Suba a infraestrutura** com Docker, Compose, Terraform e Kubernetes direto do editor.
+
+Tudo com o visual das IDEs JetBrains (tema *Islands*) e, no macOS, com o **Liquid Glass** nativo.
+
+> **Leve de verdade:** o Rits usa o WebView do sistema (Tauri 2), sem Chromium embutido. O app tem cerca de **7 MB**, e os drivers de banco só são baixados quando você usa aquele banco.
+
+## Para quem é
+
+- **Engenheiros de dados** que escrevem ETL/ELT em Python ou Go e passam o dia entre código e SQL.
+- **Analytics engineers** que exploram schemas, comparam bancos e precisam ver o modelo de dados.
+- **Times de plataforma de dados** que mantêm a infraestrutura (Postgres no Docker, Terraform, manifestos Kubernetes) junto do código.
+
+## Destaques
+
+### Bancos de dados
+
+| Banco | Driver |
+|---|---|
+| PostgreSQL, MySQL / MariaDB | incluído no app |
+| SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB | baixado na primeira conexão* |
+| CockroachDB, TimescaleDB, Supabase / Neon, TiDB, Amazon Redshift | presets dos drivers acima |
+
+<sub>* Como no DataGrip e no DBeaver, o driver é baixado ao testar ou salvar a primeira conexão daquele banco, e só uma vez. Os drivers rodam num ambiente Python privado do Rits, então é preciso ter o **Python 3.9+** instalado.</sub>
+
+- **Explorador** de conexões → bancos → schemas → tabelas, views, funções, sequências e triggers.
+- **Console SQL** com autocomplete de tabelas e colunas, várias instruções por execução, transação manual, cancelamento de query, EXPLAIN e histórico.
+- **Editor de dados** paginado, com filtro e ordenação, edição inline, preview do SQL gerado e gravação em transação.
+- **Diagrama ER**: cartões de tabela com PK/FK e tipos, ligações com cardinalidade, layout automático, minimapa, busca, pan/zoom (pinça no trackpad), exportação para **SVG** e cópia como **Mermaid**.
+- **MongoDB** com comandos no estilo `mongosh` (`db.pedidos.find({status: "pago"}).limit(20)`) e relações inferidas no diagrama.
+- **DDL**, exportação (CSV, TSV, JSON, SQL, Markdown, HTML) e **backup/restore** com `pg_dump`/`pg_restore`/`mysqldump`.
+- **Conexões por projeto**: cada conexão aparece só no projeto em que foi criada, a menos que você a marque como global.
+
+### Código
+
+- **Python** (basedpyright, Ruff, debugpy, pytest) e **Go** (gopls, Delve, staticcheck), instalados com um clique em Configurações › Plugins.
+- **Autocomplete no estilo JetBrains**: relevância do servidor de linguagem, documentação ao lado, **importação automática** ao aceitar, Tab ou Enter. Liga e desliga em Configurações › Editor.
+- Ir para definição, encontrar usos, renomear, quick fixes, reformatar e otimizar imports.
+- Executar e depurar com breakpoints, variáveis, step e console; ▶ no gutter para `main` e testes.
+- **Git** completo: commit, push/pull, branches, log, diff lado a lado.
+- Terminal real (PTY) com o venv do projeto ativado.
+
+### Infraestrutura
+
+- **Docker**: gerenciador de containers (plugin opcional), com containers agrupados por projeto do Compose, iniciar/parar/reiniciar, logs, shell no container, CPU e memória ao vivo, imagens e volumes.
+- **Docker Compose, Dockerfile, Terraform e Kubernetes**: realce, autocomplete e validação por schema, mais uma barra de ações no topo do arquivo (`compose up/down/logs`, `terraform plan/apply/validate`, `kubectl apply/diff`, `docker build`).
+- **Modelos prontos** em Novo › Dockerfile, Compose, Terraform e Kubernetes.
+
+### Experiência
+
+- Layout das IDEs JetBrains: barra de projeto, branch e execução; janelas de ferramentas nas laterais; status bar com breadcrumbs.
+- Janelas de ferramentas **arrastáveis** entre as faixas da esquerda e da direita.
+- Keymaps **VS Code** (padrão no macOS) e **JetBrains**, com os atalhos exibidos com ⌘⌥⇧ no Mac.
+- Temas Islands Dark e Light, e **Liquid Glass** no macOS 26 (vibrancy nas versões anteriores).
+- Interface toda em português.
+
+## Instalação
+
+### macOS (Apple Silicon)
+
+Gere o app a partir do código (veja [Desenvolvimento](#desenvolvimento)) e abra `Rits.app` ou o `.dmg` em `src-tauri/target/release/bundle/`. O app usa assinatura ad-hoc: na primeira vez, use clique direito › **Abrir**.
+
+As ferramentas de linguagem e de banco vêm do Homebrew:
+
+```bash
+brew install python go libpq mysql-client
+```
+
+### Windows 11
+
+`npm run tauri build` gera o instalador NSIS (cerca de 3,5 MB) em `src-tauri/target/release/bundle/nsis/`.
+
+## Primeiros passos
+
+1. **Abra uma pasta** ou crie um projeto (Python com `.venv`, Go com `go mod init`, ou vazio).
+2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC) ou Docker.
+3. **Conecte um banco**: abra a janela Database (Alt+2, ou ⌥2 no Mac), clique em **+**, escolha o banco e preencha a conexão.
+4. **Veja o modelo**: clique direito no schema › **Diagrama ER**.
+5. **Suba a infra**: crie um `compose.yaml` em Novo › docker-compose.yml e clique em **Subir** na barra do editor.
+
+## Atalhos principais
+
+| Ação | VS Code (padrão no Mac) | JetBrains |
+|---|---|---|
+| Paleta de comandos | ⌘⇧P | Ctrl+Shift+A |
+| Abrir arquivo | ⌘P | Ctrl+Shift+N |
+| Mostrar/ocultar barra lateral / painel | ⌘B / ⌘J | Alt+1 (Projeto) / Shift+Esc (ocultar) |
+| Terminal | ⌃` | Alt+F12 |
+| Ir para definição / usos | F12 / ⇧F12 | Ctrl+B / Alt+F7 |
+| Renomear | F2 | Shift+F6 |
+| Depurar / executar | F5 / ⌃F5 | Shift+F9 / Shift+F10 |
+
+O esquema muda em Configurações › Keymap, onde fica a lista completa.
+
+## Arquitetura
 
 | Camada | Tecnologia |
 |---|---|
-| Janela / runtime | Tauri 2 (WebView2 do Windows, sem Chromium embutido), janela sem moldura com barra própria |
-| Backend | Rust: `tokio-postgres`, `mysql_async`, `portable-pty` (ConPTY), `notify`, `ignore`, `regex`, `trash` |
-| Frontend | TypeScript puro + Vite, CodeMirror 6, `@codemirror/lsp-client`, `@codemirror/merge`, xterm.js |
-| Linguagens | basedpyright, Ruff, debugpy e pytest (Python); gopls, Delve e staticcheck (Go) |
+| Janela / runtime | Tauri 2 (WebView2 no Windows, WKWebView no macOS) |
+| Backend | Rust: `tokio-postgres`, `mysql_async`, `portable-pty`, `notify`, `ignore` |
+| Drivers sob demanda | processo Python privado (`python-tds`, `oracledb`, `firebirdsql`, `duckdb`, `clickhouse-connect`, `pymongo`) |
+| Frontend | TypeScript sem framework + Vite, CodeMirror 6, xterm.js |
+| Linguagens | servidores LSP e adaptadores DAP (basedpyright, gopls, terraform-ls, yaml-language-server, debugpy, Delve) |
 
-O backend é genérico: lista e lê arquivos, faz busca, observa o disco, inicia processos com framing JSON-RPC (LSP/DAP por stdio ou TCP) e abre terminais PTY. Toda a lógica da IDE fica no frontend (`src/ide/`), na mesma arquitetura que o VS Code usa (servidores de linguagem e adaptadores de depuração).
-
-## Funcionalidades
-
-**Janela e projetos**
-- Barra principal com **widget de projeto**: projetos recentes, novo projeto, abrir, clonar repositório e fechar. Ao trocar de projeto, pergunta se abre nesta janela ou numa nova.
-- **Widget de branch**: atualizar (pull), commit, push, novo branch, checkout, merge, renomear e excluir branches locais e remotos.
-- **Widget de execução**: configurações de execução, ▶ executar, 🐞 depurar e ■ parar.
-- Tela de boas-vindas, Novo projeto (Python com `.venv`, Go com `go mod init`, vazio, com Git opcional) e Clonar repositório.
-- Tool windows nas faixas laterais: Projeto, Commit, Estrutura, Database, Run, Debug, Terminal, Problemas, Git, Services, Find. Todas redimensionáveis e móveis entre esquerda, direita e baixo.
-- Barra de status com breadcrumbs, linha:coluna, LF/CRLF, encoding, indentação, status do servidor de linguagem e interpretador/SDK.
-- Temas Islands Dark e Islands Light.
-
-**Editor**
-- Autocomplete, diagnósticos ao vivo, hover (Ctrl+Q), assinatura (Ctrl+P), ir para definição/implementação (Ctrl+B / Ctrl+Clique), encontrar usos (Alt+F7), renomear (Shift+F6), ações de contexto e quick fixes (Alt+Enter).
-- Reformatar código (Ruff no Python, gofmt via gopls no Go), otimizar imports, auto-save, e gofmt ao salvar opcional.
-- Gutter com breakpoints, ▶ para rodar `main`/`__main__` e testes, e marcas de alteração do Git.
-
-**Executar, testar e depurar**: Python, pytest, `go run` e `go test`, com saída colorida, links clicáveis em tracebacks e stdin. O depurador (debugpy/Delve) tem frames, variáveis expansíveis, step over/into/out, avaliação de expressões e console.
-
-**Git**: commit com seleção de arquivos e amend, push/pull/fetch, log com detalhes, diff lado a lado com HEAD, reverter, `.gitignore` e clone.
-
-**Navegação**: Buscar em tudo (Shift duplo), arquivos (Ctrl+Shift+N), símbolos (Ctrl+N), ações (Ctrl+Shift+A), localizar nos arquivos com preview (Ctrl+Shift+F), arquivos recentes (Ctrl+E), estrutura (Ctrl+F12) e ir para linha (Ctrl+G).
-
-**Plugins** (Configurações › Plugins): mostram o status de cada componente e instalam ou atualizam com um clique. No Python os componentes vão no interpretador do projeto; no Go, no GOPATH.
-
-**Database Tools**: explorador de conexões, console SQL com autocomplete, editor de dados com DML e preview, DDL, exportação, e backup/restore via `pg_dump`/`pg_restore`/`psql`/`mysqldump`/`mysql`.
+O backend é genérico: arquivos, processos (LSP/DAP via JSON-RPC), terminais e bancos. A lógica da IDE fica no frontend (`src/ide/`). O guia completo para quem for programar no projeto está no **[AGENTS.md](AGENTS.md)**.
 
 ## Desenvolvimento
 
+Pré-requisitos: Node 22+, Rust stable e, no Windows, o Visual Studio Build Tools (C++). No macOS, os Xcode Command Line Tools.
+
 ```bash
 npm install
-npm run tauri dev
-```
-
-Build de release (exe e instalador NSIS em `src-tauri/target/release/bundle/nsis`):
-
-```bash
-npm run tauri build
-```
-
-Testes do backend:
-
-```bash
+npm run tauri dev       # modo desenvolvimento com hot reload
+npm run tauri build     # app de release (.app/.dmg no macOS, instalador NSIS no Windows)
+npx tsc --noEmit -p .   # checagem de tipos
 cd src-tauri && cargo test
 ```
 
-Os testes marcados com `--ignored` precisam do Docker (Postgres e MySQL de teste, com dados em `src-tauri/tests/fixtures`) e das ferramentas de linguagem instaladas. O passo a passo está no [AGENTS.md](AGENTS.md), que também é o guia completo de arquitetura e convenções para quem for programar no projeto.
+Os testes de integração (`cargo test -- --ignored`) usam Postgres e MySQL no Docker e as ferramentas de linguagem; o passo a passo está no [AGENTS.md](AGENTS.md#3-como-rodar-compilar-e-testar).
 
-## Créditos e licenças
+## Dados e privacidade
 
-- Os ícones em `src/assets/icons` e as cores dos temas vêm do projeto [IntelliJ Community](https://github.com/JetBrains/intellij-community), sob Apache 2.0 (veja `src/assets/icons/LICENSE-intellij-community.txt`). O nome e o logo do Rits são próprios. Nenhum código, binário ou asset do DataGrip foi usado.
-- Fontes Inter e JetBrains Mono, sob SIL Open Font License.
+- As conexões ficam em `connections.json` na pasta de configuração do app (`~/Library/Application Support/dev.rits.ide` no macOS, `%APPDATA%\dev.rits.ide` no Windows). **As senhas ainda são guardadas em texto puro**; a integração com o Keychain e o Credential Manager está pendente.
+- Os drivers baixados ficam em `drivers/` na mesma pasta e podem ser apagados quando quiser (são baixados de novo quando necessário).
+- O Rits não envia telemetria.
 
-## Observações
+## Créditos e licença
 
-- As conexões de banco ficam em `%APPDATA%\dev.rits.ide\connections.json`, **com as senhas em texto puro**.
-- O primeiro carregamento do gopls num projeto pode levar alguns segundos enquanto ele indexa os pacotes.
+- Código sob a licença [MIT](LICENSE).
+- Os ícones em `src/assets/icons` e as cores dos temas vêm do [IntelliJ Community](https://github.com/JetBrains/intellij-community) (Apache 2.0; veja `src/assets/icons/LICENSE-intellij-community.txt`). O nome, a logo do Rits e os demais ícones são próprios. Nenhum código ou asset de produtos comerciais da JetBrains foi usado.
+- Docker, PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Terraform e Kubernetes são marcas de seus respectivos donos; os ícones são desenhos simplificados para identificar cada integração.
+- Fontes Inter e JetBrains Mono (SIL Open Font License).

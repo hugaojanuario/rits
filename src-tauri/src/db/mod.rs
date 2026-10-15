@@ -1,11 +1,12 @@
 //! Database sessions. Each (connection, database, channel) gets its own physical
 //! connection so a long console query never blocks the explorer.
 
+pub mod ext;
 pub mod my;
 pub mod pg;
 
 use crate::store::{ConnConfig, DbKind};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -13,7 +14,7 @@ use tokio::sync::Mutex;
 /// Hard cap on rows sent to the UI for a single result set.
 pub const MAX_ROWS: usize = 50_000;
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResult {
     pub columns: Vec<String>,
@@ -25,7 +26,7 @@ pub struct QueryResult {
     pub elapsed_ms: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DbObject {
     pub name: String,
@@ -34,7 +35,7 @@ pub struct DbObject {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnInfo {
     pub name: String,
@@ -45,7 +46,7 @@ pub struct ColumnInfo {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexInfo {
     pub name: String,
@@ -54,7 +55,7 @@ pub struct IndexInfo {
     pub primary: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionTable {
     pub schema: String,
@@ -62,16 +63,45 @@ pub struct CompletionTable {
     pub columns: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
     pub version: String,
     pub current_user: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKey {
+    pub name: String,
+    pub table: String,
+    pub columns: Vec<String>,
+    pub ref_schema: String,
+    pub ref_table: String,
+    pub ref_columns: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagramTable {
+    pub name: String,
+    pub kind: String,
+    pub columns: Vec<ColumnInfo>,
+}
+
+/// Everything the ER diagram needs for one schema, in a single round trip.
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagramInfo {
+    pub tables: Vec<DiagramTable>,
+    pub fks: Vec<ForeignKey>,
+}
+
 pub enum Session {
     Pg(pg::PgConn),
     My(my::MyConn),
+    /// SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB: on-demand driver process.
+    Ext(ext::ExtConn),
 }
 
 impl Session {
@@ -79,6 +109,7 @@ impl Session {
         match cfg.kind {
             DbKind::Postgres => Ok(Session::Pg(pg::PgConn::open(cfg, db).await?)),
             DbKind::Mysql => Ok(Session::My(my::MyConn::open(cfg, db).await?)),
+            _ => Ok(Session::Ext(ext::ExtConn::open(cfg, db).await?)),
         }
     }
 }
@@ -96,6 +127,8 @@ pub struct Sessions {
 pub enum Canceller {
     Pg(tokio_postgres::CancelToken, bool),
     My(ConnConfig, u32),
+    /// Driver process: cancelling kills it (the session reopens on the next query).
+    Ext(u32),
 }
 
 impl Sessions {
@@ -108,9 +141,10 @@ impl Sessions {
         let db = if db.is_empty() { cfg.default_db() } else { db.to_string() };
         let key = (cfg.id.clone(), db.clone(), channel.to_string());
         if let Some(s) = self.map.lock().await.get(&key) {
-            let alive = match &*s.lock().await {
+            let alive = match &mut *s.lock().await {
                 Session::Pg(c) => !c.client.is_closed(),
                 Session::My(_) => true,
+                Session::Ext(c) => c.alive(),
             };
             if alive {
                 return Ok(s.clone());
@@ -120,6 +154,7 @@ impl Sessions {
         let canceller = match &session {
             Session::Pg(c) => Canceller::Pg(c.client.cancel_token(), cfg.ssl),
             Session::My(c) => Canceller::My(cfg.clone(), c.id()),
+            Session::Ext(c) => Canceller::Ext(c.pid),
         };
         let arc = Arc::new(Mutex::new(session));
         self.map.lock().await.insert(key.clone(), arc.clone());
@@ -138,6 +173,10 @@ impl Sessions {
         match found {
             Some(Canceller::Pg(token, ssl)) => pg::cancel(token, ssl).await,
             Some(Canceller::My(cfg, id)) => my::kill_query(&cfg, id).await,
+            Some(Canceller::Ext(pid)) => {
+                crate::procs::kill_tree(pid).await;
+                Ok(())
+            }
             None => Ok(()),
         }
     }

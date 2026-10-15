@@ -11,7 +11,7 @@ fn cfg(kind: DbKind) -> ConnConfig {
         host: "127.0.0.1".into(), port: if pg { 5432 } else { 3306 },
         user: if pg { "postgres".into() } else { "root".into() },
         password: "bgtest".into(), database: "loja".into(),
-        ssl: false, tools_dir: String::new(), color: String::new(), read_only: false,
+        ssl: false, tools_dir: String::new(), color: String::new(), read_only: false, project: String::new(),
     }
 }
 

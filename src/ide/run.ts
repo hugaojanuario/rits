@@ -2,7 +2,7 @@
 import { h, uid } from "../util";
 import { icon } from "../icons";
 import { button, modal, popupList, toast, type PopupItem } from "../ui";
-import { host, on, P, type ProcExit, type ProcOut } from "./host";
+import { host, INSTALL, IS_WIN, on, P, type ProcExit, type ProcOut } from "./host";
 import { findGo, scriptsDir } from "./sdk";
 import type { RunConfig } from "./project";
 import type { RunTarget } from "./editors";
@@ -189,9 +189,9 @@ export class Runner {
   /** Resolves a config into the concrete command line. */
   async command(c: RunConfig): Promise<Command> {
     const root = this.wb.root;
-    const abs = P.same(c.target, ".") ? root : /^[A-Za-z]:\//.test(P.norm(c.target)) ? P.norm(c.target) : P.join(root, c.target);
+    const abs = P.same(c.target, ".") ? root : P.isAbs(c.target) ? P.norm(c.target) : P.join(root, c.target);
     const env = parseEnv(c.env);
-    const cwd = c.cwd ? (/^[A-Za-z]:/.test(c.cwd) ? c.cwd : P.join(root, c.cwd)) : root;
+    const cwd = c.cwd ? (P.isAbs(c.cwd) ? c.cwd : P.join(root, c.cwd)) : root;
     const args = splitArgs(c.args);
     const py = this.wb.python?.path;
     if ((c.kind === "python" || c.kind === "pytest") && !py) throw new Error("Nenhum interpretador Python configurado. Configure em Configurações › Python.");
@@ -206,7 +206,7 @@ export class Runner {
       case "go":
       case "gotest": {
         const go = await findGo();
-        if (!go) throw new Error("Go SDK não encontrado. Instale o Go (winget install GoLang.Go) e reinicie.");
+        if (!go) throw new Error(`Go SDK não encontrado. Instale o Go (${INSTALL.go}) e reinicie.`);
         const pkgDir = (await host.list(abs).then(() => abs).catch(() => P.dir(abs))) as string;
         let rel = "./" + P.rel(root, pkgDir);
         if (P.same(pkgDir, root)) rel = ".";
@@ -214,6 +214,7 @@ export class Runner {
         return { program: go.path, args: ["test", "-v", ...(c.filter ? ["-run", `^${c.filter}$`] : []), rel === "." ? "./..." : rel, ...args], cwd, env };
       }
       case "shell":
+        if (!IS_WIN) return { program: "/bin/sh", args: ["-c", c.target + " " + c.args], cwd, env };
         return { program: "powershell.exe", args: ["-NoLogo", "-NoProfile", "-Command", c.target + " " + c.args], cwd, env };
     }
   }

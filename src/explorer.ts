@@ -6,14 +6,16 @@ import { confirmDialog, contextMenu, promptDialog, toast, type MenuItem } from "
 import { copyText, h, qualified, quoteIdent } from "./util";
 import type { ObjectRef } from "./tableView";
 import { exportToFile, type ExportFormat } from "./export";
+import { dialect } from "./dialects";
 
 export interface ExplorerActions {
-  newConnection: () => void;
+  newConnection: (anchor?: HTMLElement) => void;
   editConnection: (c: ConnConfig) => void;
   openConsole: (c: ConnConfig, db?: string, schema?: string, text?: string, run?: boolean) => void;
   openObject: (c: ConnConfig, ref: ObjectRef) => void;
   backup: (c: ConnConfig, db: string, schemas?: string[], tables?: string[]) => void;
   restore: (c: ConnConfig, db: string) => void;
+  openDiagram: (c: ConnConfig, db: string, schema: string, focus?: string) => void;
 }
 
 interface Node {
@@ -66,7 +68,7 @@ export class Explorer {
         null,
         h("span.panel-title", null, "Explorador"),
         h("span.grow"),
-        h("button.icon-btn", { title: "Nova conexão", onclick: () => act.newConnection() }, icon("plus")),
+        h("button.icon-btn", { title: "Nova conexão", onclick: (e: MouseEvent) => act.newConnection(e.currentTarget as HTMLElement) }, icon("plus")),
         h("button.icon-btn", { title: "Atualizar", onclick: () => this.refreshSelected() }, icon("refresh")),
         h("button.icon-btn", { title: "Abrir console (Ctrl+Shift+L)", onclick: () => this.consoleForSelected() }, icon("console")),
         h("button.icon-btn", { title: "Recolher tudo", onclick: () => this.collapseAll() }, icon("collapse")),
@@ -100,7 +102,7 @@ export class Explorer {
     const { conn, db, schema } = this.ctxOf(this.selected);
     const c = conn ?? store.connections[0];
     if (!c) return this.act.newConnection();
-    this.act.openConsole(c, db, conn?.kind === "postgres" ? schema : undefined);
+    this.act.openConsole(c, db, conn && dialect(conn.kind).schemas ? schema : undefined);
   }
 
   // ---------- node factories ----------
@@ -110,13 +112,13 @@ export class Explorer {
     const n: Node = {
       key,
       label: c.name,
-      icon: c.kind,
+      icon: dialect(c.kind).icon,
       color: c.color,
-      detail: `${c.host}:${c.port}`,
+      detail: (dialect(c.kind).file ? c.database.split(/[\\/]/).pop() : `${c.host}:${c.port}`) + (c.project ? "" : "  · global"),
       load: async () => {
         await store.connect(c.id);
         const dbs = await api.databases(c.id);
-        const shown = c.kind === "postgres" && c.database ? [c.database, ...dbs.filter((d) => d !== c.database)] : dbs;
+        const shown = c.database && dbs.includes(c.database) ? [c.database, ...dbs.filter((d) => d !== c.database)] : dbs;
         return shown.map((d) => this.dbNode(c, d));
       },
       menu: () => this.connMenu(c, n),
@@ -129,10 +131,10 @@ export class Explorer {
     const n: Node = {
       key: `db|${c.id}|${db}`,
       label: db,
-      icon: c.kind === "postgres" ? "database" : "schema",
+      icon: dialect(c.kind).schemas ? "database" : "schema",
       dim: SYSTEM.has(db),
       load: async () => {
-        if (c.kind === "mysql") return this.folderNodes(c, db, db);
+        if (!dialect(c.kind).schemas) return this.folderNodes(c, db, db);
         const schemas = await api.schemas(c.id, db);
         return schemas.map((s) => this.schemaNode(c, db, s));
       },
@@ -158,8 +160,9 @@ export class Explorer {
   private async folderNodes(c: ConnConfig, db: string, schema: string): Promise<Node[]> {
     const objs = await api.objects(c.id, db, schema);
     const out: Node[] = [];
-    for (const [kind, label] of FOLDERS) {
+    for (const [kind, folderLabel] of FOLDERS) {
       const list = objs.filter((o) => o.kind === kind);
+      const label = kind === "table" ? (dialect(c.kind).tablesLabel ?? folderLabel) : folderLabel;
       if (!list.length) continue;
       const folder: Node = {
         key: `folder|${c.id}|${db}|${schema}|${kind}`,
@@ -212,11 +215,18 @@ export class Explorer {
         : { label: "Conectar", icon: "plug", action: () => this.expand(n) },
       { label: "Atualizar", icon: "refresh", shortcut: "F5", action: () => this.reload(n) },
       { separator: true },
-      { label: "Backup…", icon: "backup", action: () => this.act.backup(c, c.database || (c.kind === "postgres" ? "postgres" : "")) },
-      { label: "Restaurar…", icon: "restore", action: () => this.act.restore(c, c.database) },
-      { label: "Criar database…", icon: "plus", action: () => this.createDatabase(c, n) },
+      ...(dialect(c.kind).backup
+        ? ([
+            { label: "Backup…", icon: "backup", action: () => this.act.backup(c, c.database || (c.kind === "postgres" ? "postgres" : "")) },
+            { label: "Restaurar…", icon: "restore", action: () => this.act.restore(c, c.database) },
+          ] as MenuItem[])
+        : []),
+      ...(["pg", "mysql", "sqlserver", "clickhouse"].includes(dialect(c.kind).family) ? [{ label: "Criar database…", icon: "plus", action: () => this.createDatabase(c, n) } as MenuItem] : []),
       { separator: true },
       { label: "Propriedades…", icon: "edit", action: () => this.act.editConnection(c) },
+      c.project
+        ? { label: "Mostrar em todos os projetos", icon: "general/openNewTab", action: () => store.save({ ...c, project: "" }) }
+        : { label: "Mostrar só neste projeto", icon: "general/pin", disabled: !store.projectRoot, action: () => store.save({ ...c, project: store.projectRoot }) },
       {
         label: "Duplicar",
         icon: "copy",
@@ -235,32 +245,40 @@ export class Explorer {
   }
 
   private dbMenu(c: ConnConfig, db: string, n: Node): MenuItem[] {
+    const d = dialect(c.kind);
     return [
       { label: "Nova console", icon: "console", action: () => this.act.openConsole(c, db) },
+      ...(!d.schemas ? [{ label: "Diagrama ER", icon: "diagram", action: () => this.act.openDiagram(c, db, db) } as MenuItem] : []),
       { label: "Atualizar", icon: "refresh", action: () => this.reload(n) },
       { separator: true },
-      { label: "Backup…", icon: "backup", action: () => this.act.backup(c, db) },
-      { label: "Restaurar…", icon: "restore", action: () => this.act.restore(c, db) },
-      { separator: true },
+      ...(d.backup
+        ? ([
+            { label: "Backup…", icon: "backup", action: () => this.act.backup(c, db) },
+            { label: "Restaurar…", icon: "restore", action: () => this.act.restore(c, db) },
+            { separator: true },
+          ] as MenuItem[])
+        : []),
       { label: "Copiar nome", icon: "copy", action: () => copyText(db) },
-      ...(c.kind === "mysql"
-        ? [{ label: "Criar tabela…", icon: "plus", action: () => this.createTableTemplate(c, db, db) } as MenuItem]
-        : [{ label: "Criar schema…", icon: "plus", action: () => this.createSchema(c, db, n) } as MenuItem]),
-      {
-        label: c.kind === "mysql" ? "Excluir database (DROP)…" : "Excluir database (DROP)…",
-        icon: "trash",
-        danger: true,
-        action: () => this.dropDatabase(c, db, n),
-      },
+      ...(!d.schemas
+        ? d.createTable
+          ? [{ label: "Criar tabela…", icon: "plus", action: () => this.createTableTemplate(c, db, db) } as MenuItem]
+          : []
+        : ["pg", "sqlserver", "duckdb"].includes(d.family)
+          ? [{ label: "Criar schema…", icon: "plus", action: () => this.createSchema(c, db, n) } as MenuItem]
+          : []),
+      ...(["pg", "mysql", "sqlserver", "clickhouse"].includes(d.family)
+        ? [{ label: "Excluir database (DROP)…", icon: "trash", danger: true, action: () => this.dropDatabase(c, db, n) } as MenuItem]
+        : []),
     ];
   }
 
   private schemaMenu(c: ConnConfig, db: string, schema: string, n: Node): MenuItem[] {
     return [
       { label: "Nova console", icon: "console", action: () => this.act.openConsole(c, db, schema) },
+      { label: "Diagrama ER", icon: "diagram", action: () => this.act.openDiagram(c, db, schema) },
       { label: "Atualizar", icon: "refresh", action: () => this.reload(n) },
       { separator: true },
-      { label: "Backup do schema…", icon: "backup", action: () => this.act.backup(c, db, [schema]) },
+      ...(dialect(c.kind).backup ? [{ label: "Backup do schema…", icon: "backup", action: () => this.act.backup(c, db, [schema]) } as MenuItem] : []),
       { label: "Criar tabela…", icon: "plus", action: () => this.createTableTemplate(c, db, schema) },
       { label: "Copiar nome", icon: "copy", action: () => copyText(schema) },
       {
@@ -268,8 +286,9 @@ export class Explorer {
         icon: "trash",
         danger: true,
         action: async () => {
-          if (!(await confirmDialog("Excluir schema", `DROP SCHEMA ${schema} CASCADE?\nTodos os objetos do schema serão apagados.`, "Excluir", true))) return;
-          await this.run(c, db, `DROP SCHEMA ${quoteIdent(c.kind, schema)} CASCADE`);
+          const cascade = ["pg", "duckdb"].includes(dialect(c.kind).family) ? " CASCADE" : "";
+          if (!(await confirmDialog("Excluir schema", `DROP SCHEMA ${schema}${cascade}?\nTodos os objetos do schema serão apagados.`, "Excluir", true))) return;
+          await this.run(c, db, `DROP SCHEMA ${quoteIdent(c.kind, schema)}${cascade}`);
           if (n.parent) this.reload(n.parent);
         },
       },
@@ -278,13 +297,17 @@ export class Explorer {
 
   private objectMenu(c: ConnConfig, ref: ObjectRef): MenuItem[] {
     const k = c.kind;
+    const d = dialect(k);
     const fq = qualified(k, ref.schema, ref.name);
     const isRel = ref.kind === "table" || ref.kind === "view" || ref.kind === "matview";
     const items: MenuItem[] = [];
     if (isRel) {
       items.push(
         { label: "Abrir dados", icon: "table", shortcut: "Enter", action: () => this.act.openObject(c, ref) },
-        {
+        { label: "Mostrar no diagrama", icon: "diagram", action: () => this.act.openDiagram(c, ref.db, ref.schema, ref.name) },
+      );
+      if (d.sql)
+        items.push({
           label: "Gerar SQL",
           icon: "console",
           submenu: [
@@ -298,7 +321,8 @@ export class Explorer {
               : []),
             { label: "DDL", action: () => this.genSql(c, ref, "ddl") },
           ],
-        },
+        });
+      items.push(
         {
           label: "Exportar dados",
           icon: "export",
@@ -312,7 +336,7 @@ export class Explorer {
           icon: "info",
           action: async () => {
             try {
-              const [r] = await api.execute(c.id, ref.db, "meta-run", `SELECT COUNT(*) FROM ${fq}`);
+              const [r] = await api.execute(c.id, ref.db, "meta-run", d.count ? d.count(ref.schema, ref.name) : `SELECT COUNT(*) FROM ${fq}`);
               toast(`${ref.name}: ${Number(r.rows[0][0]).toLocaleString()} linha(s)`, "info", 5000);
             } catch (e) {
               toast(String(e), "error");
@@ -320,13 +344,13 @@ export class Explorer {
           },
         },
       );
-      if (ref.kind === "table")
+      if (ref.kind === "table" && d.backup)
         items.push({ label: "Backup da tabela…", icon: "backup", action: () => this.act.backup(c, ref.db, [], [k === "postgres" ? `${ref.schema}.${ref.name}` : ref.name]) });
     } else {
       items.push({ label: "Ver DDL", icon: "ddl", action: () => this.act.openObject(c, ref) });
     }
     items.push({ separator: true }, { label: "Copiar nome", icon: "copy", action: () => copyText(ref.name) }, { label: "Copiar nome qualificado", action: () => copyText(fq) });
-    if (ref.kind === "table") {
+    if (ref.kind === "table" && d.sql && d.family !== "sqlite") {
       items.push({
         label: "Truncar…",
         icon: "trash",
@@ -346,7 +370,7 @@ export class Explorer {
       sequence: "SEQUENCE",
       event: "EVENT",
     };
-    if (dropKind[ref.kind]) {
+    if (dropKind[ref.kind] && d.sql) {
       items.push({
         label: "Excluir (DROP)…",
         icon: "trash",
@@ -380,7 +404,7 @@ export class Explorer {
       const where = (pk.length ? pk : cols.slice(0, 1)).map((x) => `${quoteIdent(k, x.name)} = ?`).join(" AND ");
       const sql =
         what === "select"
-          ? `SELECT ${names.join(",\n       ")}\nFROM ${fq}\nLIMIT 100;`
+          ? `${dialect(k).page(`SELECT ${names.join(",\n       ")}\nFROM ${fq}`, 100, 0, false)};`
           : what === "insert"
             ? `INSERT INTO ${fq} (${names.join(", ")})\nVALUES (${cols.map(() => "?").join(", ")});`
             : what === "update"
@@ -394,7 +418,8 @@ export class Explorer {
 
   private async exportTable(c: ConnConfig, ref: ObjectRef, f: ExportFormat) {
     try {
-      const [r] = await api.execute(c.id, ref.db, "meta-run", `SELECT * FROM ${qualified(c.kind, ref.schema, ref.name)}`);
+      const d = dialect(c.kind);
+      const [r] = await api.execute(c.id, ref.db, "meta-run", d.browse ? d.browse(ref.schema, ref.name, 50000, 0, "") : `SELECT * FROM ${qualified(c.kind, ref.schema, ref.name)}`);
       if (r.truncated) toast(`Exportando somente as primeiras ${r.rows.length.toLocaleString()} linhas. Para tabelas grandes, use Backup.`, "info", 7000);
       await exportToFile(f, r.columns, r.rows, c.kind, ref.name, qualified(c.kind, ref.schema, ref.name));
     } catch (e) {
@@ -431,10 +456,7 @@ export class Explorer {
   private createTableTemplate(c: ConnConfig, db: string, schema: string) {
     const k = c.kind;
     const t = qualified(k, schema, "nova_tabela");
-    const sql =
-      k === "postgres"
-        ? `CREATE TABLE ${t} (\n    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    nome       TEXT NOT NULL,\n    criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()\n);`
-        : `CREATE TABLE ${t} (\n    id         BIGINT AUTO_INCREMENT PRIMARY KEY,\n    nome       VARCHAR(255) NOT NULL,\n    criado_em  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n);`;
+    const sql = dialect(k).createTable?.(t) ?? `CREATE TABLE ${t} (\n    id INTEGER PRIMARY KEY\n);`;
     this.act.openConsole(c, db, schema, sql);
   }
 
@@ -542,7 +564,7 @@ export class Explorer {
           "div.tree-empty",
           null,
           h("p", null, "Nenhuma conexão ainda."),
-          h("button.btn.primary", { onclick: () => this.act.newConnection() }, icon("plus"), "Nova conexão"),
+          h("button.btn.primary", { onclick: (e: MouseEvent) => this.act.newConnection(e.currentTarget as HTMLElement) }, icon("plus"), "Nova conexão"),
         ),
       );
       return;

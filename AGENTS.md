@@ -6,11 +6,11 @@ Este arquivo explica **o que é o projeto, como ele está organizado, como rodar
 
 ## 1. O que é o Rits
 
-Rits é uma IDE desktop leve para **Python**, **Go** e **bancos de dados** (PostgreSQL e MySQL/MariaDB), para Windows (o código é portável, mas só é testado no Windows 11).
+Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados** e infraestrutura (Docker, Terraform, Kubernetes). Em termos de plataforma, é uma IDE para **Python**, **Go** e **bancos de dados** (PostgreSQL e MySQL/MariaDB), para Windows 11 e macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
 
 - **Visual**: copia o *layout* e o *look* das IDEs JetBrains com o tema **Islands** (Dark/Light): barra principal com widget de projeto, widget de branch e widget de execução, faixas de tool windows nas laterais, painéis em "ilhas" arredondadas e barra de status com breadcrumbs.
 - **Código**: editor CodeMirror 6 com servidores de linguagem (LSP), execução, testes, depuração (DAP), terminal real (PTY), Git e navegação no estilo IntelliJ.
-- **Banco de dados**: explorador de conexões, console SQL, editor de dados, DDL, exportação e backup/restore com as ferramentas nativas (`pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`), no estilo do DBeaver.
+- **Banco de dados**: explorador de conexões, console SQL, editor de dados, DDL, diagrama ER, exportação e backup/restore com as ferramentas nativas (`pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`), no estilo do DBeaver. PostgreSQL e MySQL/MariaDB têm driver embutido; SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse e MongoDB baixam o driver na primeira conexão (seção 5.7).
 - **Leve**: Tauri 2 com o WebView2 do sistema, sem Chromium embutido. O instalador NSIS tem cerca de 3,5 MB, o exe cerca de 7 MB, e o processo principal usa cerca de 30 MB de RAM.
 
 A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos visíveis ao usuário em pt-BR, e comentários de código e identificadores em inglês, como no resto do código.
@@ -49,6 +49,18 @@ cd src-tauri && cargo test # testes rápidos do backend
 
 O `cargo` fica em `%USERPROFILE%\.cargo\bin`. No Git Bash, se ele não estiver no PATH, rode `export PATH="$HOME/.cargo/bin:$PATH"`.
 
+### 3.1 macOS (Apple Silicon)
+Pré-requisitos: Xcode Command Line Tools, Rust e Node (Homebrew serve). `npm run tauri build` gera `bundle/macos/Rits.app` e `bundle/dmg/Rits_<versão>_aarch64.dmg` com assinatura ad-hoc (`signingIdentity: "-"`), sem notarização.
+
+O que é específico do macOS:
+- **`src-tauri/tauri.macos.conf.json`** é mesclado pelo Tauri sobre o `tauri.conf.json`. Ele troca o alvo para `app`/`dmg` e usa a janela **com** decorações e `titleBarStyle: Overlay`: os botões nativos (semáforo) ficam sobre a barra do app. O `main.ts` põe a classe `mac` no `<html>`, que esconde os `.win-controls` e reserva 78 px à esquerda da `.main-toolbar`. Ao mudar a janela principal, mude **os dois** arquivos (no merge, o array `windows` é substituído inteiro), e também o `openProjectWindow()`.
+- **PATH de app gráfico**: no macOS, apps abertos pelo Finder recebem um PATH mínimo. `procs::adopt_login_shell_path()` lê o PATH do shell de login (`$SHELL -ilc`, timeout de 3 s) ao iniciar. `default_tool_dirs()` ainda acrescenta `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/local/go/bin`, `~/.pyenv/shims` e afins.
+- **Processos**: no Unix, `hidden()` põe cada filho no próprio grupo (`process_group(0)`), e `kill_tree` mata o grupo (`kill -9 -- -<pid>`).
+- **Frontend**: `IS_WIN`/`IS_MAC`/`EXE`/`INSTALL`/`REVEAL_LABEL` em `host.ts`. `P.win()` só converte para `\` no Windows (no resto devolve o caminho igual), então continue usando-o para caminhos passados a processos. Use `P.isAbs()` em vez de testar `C:/`. O venv usa `bin/python` (e `scriptsDir()` é a própria pasta `bin`).
+- **Atalhos**: os atalhos globais aceitam Ctrl **ou** Cmd, e o keymap do editor usa `Mod-` (Cmd no macOS). Os rótulos dos menus ainda mostram "Ctrl".
+- **Liquid Glass**: a janela é transparente (`transparent`, `macOSPrivateApi` e a feature `macos-private-api` do `tauri`, só no alvo macOS no `Cargo.toml`) e usa `windowEffects` `liquidGlassRegular` (macOS 26), com fallback para `underWindowBackground`. Com a classe `glass` no `<html>` (padrão no Mac; interruptor em Configurações › Aparência; `localStorage` `glass`), a seção "Liquid Glass" no fim do `styles.css` redefine os tokens com cores translúcidas: superfícies de "frame" transparentes, ilhas com `--rim`/`--sheen` e popups com `backdrop-filter`. As cores dessa seção são as cores de sistema da Apple, não as do IntelliJ. O `setTheme()` do `main.ts` também chama `getCurrentWindow().setTheme()` para o vidro nativo acompanhar o tema (permissão `core:window:allow-set-theme`). Componente novo: use os tokens e confira com o vidro ligado e desligado.
+- **Banco**: `tools.rs` procura `pg_dump`/`mysqldump` em `/opt/homebrew/opt/{postgresql@*,libpq,mysql*,mariadb*}/bin`, no Postgres.app e em `/Library/PostgreSQL`.
+
 ### Testes de integração (`--ignored`)
 Ficam em `src-tauri/tests/` e precisam de infraestrutura:
 
@@ -65,6 +77,7 @@ cd src-tauri && cargo test -- --ignored --test-threads=1
 |---|---|
 | `tests/db_integration.rs` | metadados, DDL, várias instruções por execução, erros, acentos e cancelamento de query (Postgres/MySQL) |
 | `tests/tools_docker.rs` | os argumentos exatos que o app monta para `pg_dump`/`pg_restore`/`psql`/`mysqldump`/`mysql`, executados de verdade dentro dos containers |
+| `tests/ext_driver.rs` | drivers sob demanda: cria o venv dos drivers numa pasta temporária e conversa com o `rits_driver.py` via `ExtConn` (SQLite, sem download) |
 | `tests/ide_backend.rs` | framing JSON-RPC com escritas picotadas, UTF-8 dividido entre leituras, operações de arquivo (CRLF, BOM, binário, .gitignore, busca), e handshake real com gopls, basedpyright, debugpy e Delve via TCP |
 
 > No MySQL de teste, sempre use `--default-character-set=utf8mb4` ao popular dados pelo `docker exec`. Sem isso o texto acentuado fica com dupla codificação e parece um bug do app, mas não é.
@@ -106,6 +119,8 @@ src/
   connDialog.ts            diálogo de conexão
   backup.ts                wizards de backup/restore e painel de tarefas
   export.ts                exportação CSV/TSV/JSON/SQL/Markdown/HTML
+  dialects.ts              comportamento por banco (aspas, paginação, EXPLAIN, schemas, arquivo, presets compatíveis)
+  diagram.ts               aba de diagrama ER (canvas, layout automático, minimapa, exportar SVG/Mermaid)
   # ---- IDE de código ----
   ide/
     host.ts                wrappers dos comandos da IDE, fan-out de eventos (on), helpers de caminho (P)
@@ -126,6 +141,10 @@ src/
     settings.ts            diálogo de Configurações (Aparência, Editor, Python, Go, Plugins, Keymap, Sobre)
     welcome.ts             tela de boas-vindas, Novo projeto e Clonar repositório
     dbtools.ts             integra o Database Tools na IDE (tool windows Database e Services)
+    docker.ts              plugin opcional Docker: tool window Docker (containers, imagens, volumes) via CLI docker
+    keymap.ts              keymaps JetBrains e VS Code: displayShortcut(), tabelas do Keymap
+    completion.ts          autocomplete (LSP com resolve/auto-import, relevância, ícones por tipo; palavras do arquivo sem LSP)
+    infra.ts               Dockerfile, Compose, Terraform e Kubernetes: detecção, ações (CLIs no Terminal) e modelos
   assets/icons/            SVGs do expui (Apache 2.0) com variantes _dark e @20x20
 src-tauri/
   tauri.conf.json          productName "Rits", identifier "dev.rits.ide", janela sem moldura
@@ -133,13 +152,20 @@ src-tauri/
   src/main.rs              chama rits_lib::run()
   src/lib.rs               comandos de banco + registro de TODOS os comandos + setup (migração) + limpeza ao fechar
   src/store.rs             conexões e documentos JSON na pasta de configuração; migração do nome antigo
-  src/db/{mod,pg,my}.rs    sessões de banco (Postgres/MySQL), metadados, DDL, execução, cancelamento
+  src/db/{mod,pg,my}.rs    sessões de banco (Postgres/MySQL), metadados, DDL, diagrama, execução, cancelamento
+  src/db/ext.rs            drivers sob demanda: venv privado, pip install no primeiro uso, ExtConn (JSON por linha via stdio)
+  src/db/drivers/rits_driver.py  o "driver host" Python (SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB)
   src/tools.rs             backup/restore: monta argumentos, localiza binários, transmite o log
   src/ide.rs               comandos Tauri da IDE (arquivos, processos, PTY, which, env…)
   src/fsx.rs               sistema de arquivos: listagem com .gitignore, leitura/escrita, busca, watcher
   src/procs.rs             processos (texto ou JSON-RPC), TCP para DAP, PTY, capture, which, PATH aumentado
   tests/                   veja a seção 3
-assets/logo.svg            fonte do ícone do app (gere os ícones com: npx tauri icon assets/logo.svg -o src-tauri/icons)
+assets/logo.svg            ícone do app: a marca sobre o quadrado escuro arredondado (grade de ícone do macOS)
+assets/logo-mark.svg       só a marca, sem fundo (o "R" em forma de grafo de pipeline; o nó verde #6DB58F é a saída)
+                           gere os ícones com: npx tauri icon assets/logo.svg -o src-tauri/icons
+                           e apague as pastas android/ e ios/ que o comando cria (o app é só desktop);
+                           a versão de 20 px usada na interface é o "logo" em src/icons.ts
+README.md / README.en.md   documentação para o usuário em pt-BR (principal) e em inglês: mantenha as duas em sincronia
 dev/                       mock de navegador (só banco)
 ```
 
@@ -156,7 +182,7 @@ O Rust **não sabe** o que é Python, Go, Git ou LSP. Ele oferece primitivas gen
 - **Ambiente**: `which(name)` procura no PATH e também em `%USERPROFILE%\go\bin`, `C:\Program Files\Go\bin`, `%LOCALAPPDATA%\Programs\Python\*\Scripts` e afins. Todo processo iniciado recebe esse **PATH aumentado** e mais `PYTHONUNBUFFERED=1`, `PYTHONUTF8=1` e `PYTHONIOENCODING=utf-8`. A variável especial `RITS_PATH_PREPEND` (separada por `;`) coloca pastas na frente do PATH; é assim que o venv do projeto é ativado para programas, servidores e terminal.
 - **Dono dos processos**: cada processo e PTY guarda o *label* da janela que o criou. Ao carregar, a página chama `window_reset` e mata o que sobrou da carga anterior; quando a janela é destruída, ou na saída do app, tudo é encerrado. **Não remova isso**: sem essa limpeza, recarregar a página deixa servidores de linguagem órfãos.
 
-Toda a inteligência (qual comando rodar, como interpretar a saída, LSP, DAP, Git) fica em `src/ide/*.ts`. Para um recurso novo, **prefira compor essas primitivas no frontend** a criar um comando Rust específico.
+Toda a inteligência (qual comando rodar, como interpretar a saída, LSP, DAP, Git) fica em `src/ide/*.ts`. A exceção são os drivers de banco sob demanda (`db/ext.rs`), que precisam ser chamados pelos mesmos comandos de banco do explorador. Para um recurso novo, **prefira compor essas primitivas no frontend** a criar um comando Rust específico.
 
 ### 5.2 Eventos do backend → frontend
 O `host.ts` registra **um** listener Tauri por evento e distribui por `id` com `on<T>(evento, id, handler)`, que devolve a função de unsubscribe. Sempre chame o unsubscribe quando o processo terminar, como fazem `run.ts`, `debug.ts` e `lsp.ts`.
@@ -171,7 +197,13 @@ O `host.ts` registra **um** listener Tauri por evento e distribui por `id` com `
 
 **Tool windows**: `wb.register({id, title, icon, anchor: "left"|"right"|"bottom", shortcut, body, headerTabs?, actions?, onShow?})`. Há uma visível por lado (`show`, `hide`, `toggle`, `isVisible`). O cabeçalho é refeito por `refreshHeader(id)`, e `setBadge(id, bool)` acende o ponto vermelho na faixa. O nome do ícone é o arquivo em `assets/icons/toolwindows/<nome>@20x20.svg` (ou um ícone próprio do `icons.ts`).
 
-IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, direita), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12).
+IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, direita), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12) e `docker` (só com o plugin, embaixo à direita).
+
+**Posição das tool windows**: os botões das faixas podem ser arrastados (`stripeDrag`/`stripeDropAt`) para quatro zonas: topo da esquerda, topo da direita e os grupos de baixo de cada faixa (`anchor: "bottom"` com `side`). A ordem fica em `order`. A posição é salva no `localStorage` `toolLayout` (global, vale para todos os projetos) e aplicada no `register()`. O menu ⋮ de cada janela tem "Mover para…" e "Restaurar layout padrão". `unregister(id)` remove uma janela (usado pelos plugins opcionais).
+
+**Keymaps** (`keymap.ts`): `keymapId()` é `"vscode"` (padrão no macOS) ou `"jetbrains"` (padrão no Windows), no `localStorage` `keymap`. Os menus continuam escritos com rótulos JetBrains ("Ctrl" = ⌘ no Mac); `displayShortcut()` traduz para o keymap ativo e desenha ⌃⌥⇧⌘ no macOS (o `ui.ts` aplica isso em `contextMenu` e `popupList`). No modo VS Code, `Workbench.vscodeKey()` trata os atalhos globais antes dos JetBrains (incluindo o acorde ⌘K). Os do editor ficam em `CodeEditor.keymap()`, embrulhados em `jb()`/`vs()`, que checam o keymap na hora da tecla. Atalho novo: inclua nos dois keymaps e no `VS`/`keymapTable()`. Para letras use `e.code` (o Option do Mac altera o `e.key`).
+
+**Plugins opcionais**: o Docker não é instalado no interpretador; ele é "ativado" (`localStorage` `plugin.docker`). `setDockerEnabled()` emite `rits-plugins`, e `Workbench.syncPlugins()` cria ou descarta o `DockerTools`. A janela usa `docker ps/images/volume ls --format "{{json .}}"`, agrupa pelo label `com.docker.compose.project`, atualiza ao vivo com um processo `docker events` e mostra `docker stats` a cada 5 s, só quando a janela está visível. Logs e o shell no container abrem como abas do Terminal (`docker logs -f`, `docker exec -it`).
 
 **Trocar de projeto**: `wb.openProject(path)` pergunta "Esta janela / Nova janela" (a escolha pode ser lembrada no `localStorage` `openProjectIn`). "Esta janela" chama `prepareClose()` (salva, para execuções, depuração, terminais e servidores LSP) e navega para `index.html?project=<path>`. "Nova janela" cria um `WebviewWindow` com label `project-<id>`. Sem `?project`, o `main.ts` reabre o projeto mais recente; com `?welcome=1`, mostra a tela de boas-vindas.
 
@@ -188,6 +220,9 @@ IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, direita), `find` (Al
   - Na primeira vez num projeto, o gopls leva de 10 a 15 s carregando pacotes. Pedidos feitos nesse intervalo podem voltar vazios. Isso é esperado.
 - **Gutter**: a ordem é breakpoints, marcadores ▶ e marcas do Git. As marcas do Git vêm do diff de linhas (Myers, `lineDiff` em `editors.ts`) contra `git show HEAD:<arquivo>`. Os marcadores ▶ vêm de `runTargets()` por regex: Python `if __name__ == "__main__":`, `def test_*` e `class Test*`; Go `func main()` em `package main` e `func Test*|Benchmark*|Example*|Fuzz*` em `_test.go`.
 
+- **Linguagens de infra**: `LspLang` também tem `terraform` (`terraform-ls serve`), `dockerfile` (`docker-langserver --stdio`) e `yaml` (`yaml-language-server --stdio`), instalados pelo plugin "Infraestrutura (IaC)". O YAML LS recebe os schemas do Compose (por nome de arquivo) e do Kubernetes (pastas comuns e, por conteúdo, arquivos com `apiVersion` + `kind`, via `markKubernetes`). Em YAML comum, a falta do servidor não gera aviso (`ensure(lang, quiet)`). O HCL tem realce próprio (`hcl` em `lang.ts`). `infra.ts` mostra uma barra de ações no topo do editor (compose up/down/logs, terraform plan/apply/validate, kubectl apply/diff, docker build) e modelos no menu "Novo" da árvore.
+- **Autocomplete** (`completion.ts`): o `@codemirror/lsp-client` não faz `completionItem/resolve`, e por isso não traria a documentação nem o auto-import. As extensões do cliente são montadas **sem** o `serverCompletion` (veja `lsp.ts`), e a fonte própria faz uma requisição por digitação, ordena pelo `sortText` do servidor (`boost`), mostra `labelDetails`, resolve a documentação sob demanda e aplica os `additionalTextEdits` ao aceitar. O `patchInitialize` declara `resolveSupport`, `labelDetailsSupport` e todos os `CompletionItemKind` (o cliente mandava a lista vazia). Sem LSP, valem as fontes da linguagem mais as palavras do arquivo. As opções ficam no `localStorage` `completion` (Configurações › Editor › Autocompletar) e são aplicadas ao vivo pelo evento `rits-completion`.
+
 ### 5.5 Executar e depurar
 - `RunConfig` (`project.ts`) tem os tipos `python`, `pytest`, `go`, `gotest` e `shell`. `Runner.command(cfg)` resolve a linha de comando: Python roda com `-X utf8`; pytest com `-m pytest -v --color=yes alvo[::filtro]`; Go com `go run ./pkg` e `go test -v -run ^Nome$ ./pkg`. Configurações criadas pelo gutter ou pelo "Executar arquivo" são **temporárias** (no máximo 5), como no JetBrains.
 - O console renderiza ANSI (SGR) e transforma em links `File "x.py", line N` e `arquivo.go:L:C`.
@@ -201,6 +236,14 @@ Tudo passa por `git` via `run_capture`, com `-c core.quotepath=false -c color.ui
 Código de antes da IDE, reaproveitado. O `DbTools` cria o `Explorer` dentro da tool window `database` e abre consoles e tabelas como abas no `wb.tabs`. Os consoles abertos são salvos em `settings.dbConsoles`. Cada aba de console usa um **canal** (conexão física) próprio (`console-<id>`); o explorador usa `meta` e `meta-run`, e as abas de tabela usam `data`. Isso evita que uma query longa trave o explorador. O cancelamento usa `CancelToken` no Postgres e `KILL QUERY` no MySQL.
 
 O backup e o restore montam argumentos em `tools.rs` (`pg_plan`/`my_plan`, que são funções puras e testadas) e procuram os binários na pasta configurada na conexão, no PATH, em `C:\Program Files\PostgreSQL\*\bin` e em `MySQL`/`MariaDB`. A senha vai por `PGPASSWORD`/`MYSQL_PWD`, nunca pela linha de comando.
+
+**Drivers sob demanda** (`db/ext.rs`): os bancos não nativos viram `Session::Ext`. No `test_connection` e no `save_connection`, `ensure_driver(kind)` cria (uma vez) o venv em `<config>/drivers/venv` com um Python 3.9+ do sistema e roda `pip install` dos pacotes de `packages()` (puro Python quando possível: `python-tds`, `oracledb` thin, `firebirdsql`, `pymongo`). O marcador `<kind>.installed` evita baixar de novo. O progresso do pip vai para o evento `driver-progress`, mostrado no diálogo de conexão. Cada sessão é um processo `rits_driver.py`, e cancelar uma query mata esse processo (`Canceller::Ext`). Para um banco novo: variante em `DbKind`, pacotes em `packages()`, uma classe no `rits_driver.py` (registrada em `DRIVERS`) e uma entrada em `DIALECTS` (`dialects.ts`).
+
+**Dialetos** (`dialects.ts`): no frontend, todo `if postgres/mysql` deve passar por `dialect(kind)`: `quote`, `page` (LIMIT/OFFSET, OFFSET…FETCH), `explain`, `begin`, `schemas` (banco > schema > objetos ou banco > objetos), `file` (SQLite/DuckDB), `sql` (o MongoDB usa comandos estilo mongosh, e a aba de coleção é somente leitura) e `backup`. `PRESETS` oferece servidores compatíveis (CockroachDB, Supabase/Neon, TiDB, Redshift…).
+
+**Escopo da conexão**: `ConnConfig.project` guarda a pasta do projeto em que a conexão foi criada; `""` = global (as conexões antigas são globais). `store.setProject(wb.root)` e `store.connections` mostram as globais mais as do projeto; `store.all` tem todas. O diálogo tem "Mostrar esta conexão em todos os projetos", e o menu da conexão alterna o escopo.
+
+**Diagrama ER** (`diagram.ts` + comando `diagram_info`): uma consulta por schema (colunas com PK e FKs). Cartões HTML num "mundo" com `transform`, ligações SVG com pé de galinha, layout em camadas (pais à esquerda), arrastar, pan/zoom (roda = pan, Ctrl/⌘ + roda ou pinça = zoom), minimapa, busca e destaque das relações. As posições ficam no `localStorage` `diagram:<conn>:<db>:<schema>`. No MongoDB as relações são inferidas de campos `<coleção>Id` do tipo ObjectId.
 
 ### 5.8 Persistência
 Na pasta de configuração `%APPDATA%\dev.rits.ide\` ficam:
@@ -219,7 +262,7 @@ Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no
 - **Cores só por variáveis CSS** do topo de `styles.css` (`--frame`, `--island`, `--fg`, `--accent`, `--sel`, `--syn-*`…). Nunca coloque cor fixa num componente; os dois temas precisam continuar funcionando. Os valores vêm dos temas oficiais `ManyIslandsDark/Light` e do esquema `IslandSchemeDark`; consulte o intellij-community antes de "inventar" uma cor.
 - Popups e menus: `contextMenu`, `dropdown` e `popupList` (com busca, seções e submenus via `children`). Para diálogos, use `modal` com `button`; para avisos, `toast` ou `notify` (com ações).
 - Caminhos: **sempre** com barras `/` e normalizados por `P.norm()`. Compare com `P.same()`/`P.inside()` (sem diferenciar maiúsculas). Para o Windows (Explorer, argumentos que o usuário vê) use `P.win()`; para LSP, `P.uri()`/`P.fromUri()` (`file:///C:/...`).
-- Textos de interface em **pt-BR** e atalhos no padrão **JetBrains para Windows** (tabela em `settings.ts` › Keymap). Atalho novo: registre em `Workbench.installKeys()` (global) ou no `keymap()` do `CodeEditor` (editor), e atualize a tabela do Keymap.
+- Textos de interface em **pt-BR** e atalhos nos keymaps **JetBrains** e **VS Code** (`keymap.ts`; veja 5.3). Atalho novo: registre em `Workbench.installKeys()`/`vscodeKey()` (global) ou no `keymap()` do `CodeEditor` (editor), e atualize as tabelas em `keymap.ts`.
 - TypeScript `strict` e `noUnusedLocals`: o `tsc` precisa passar sem erros.
 
 **Backend**
@@ -268,4 +311,4 @@ Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no
 2. `cd src-tauri && cargo build` sem warnings e `cargo test` verde. Se mexeu em banco, backup, LSP ou DAP, rode também os `--ignored` (seção 3).
 3. Se mudou a interface, abra o app (`npm run tauri dev`) e confira o fluxo de verdade.
 4. Não commite `node_modules/`, `dist/`, `src-tauri/target/` nem `src-tauri/gen/` (já estão no `.gitignore`), nem credenciais ou conexões de teste.
-5. Atualize o `README.md` (para o usuário) e este `AGENTS.md` (para quem programa) quando o comportamento ou a estrutura mudar.
+5. Atualize o `README.md` e o `README.en.md` (para o usuário, nos dois idiomas) e este `AGENTS.md` (para quem programa) quando o comportamento ou a estrutura mudar.

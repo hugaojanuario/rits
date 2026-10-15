@@ -1,4 +1,5 @@
 import type { DbKind } from "./api";
+import { dialect } from "./dialects";
 
 type Attrs = Record<string, unknown> & { class?: string; style?: string };
 type Child = Node | string | null | undefined | false;
@@ -48,9 +49,7 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
 }
 
 export function quoteIdent(kind: DbKind, name: string): string {
-  if (kind === "mysql") return "`" + name.replace(/`/g, "``") + "`";
-  if (/^[a-z_][a-z0-9_]*$/.test(name) && !PG_RESERVED.has(name)) return name;
-  return '"' + name.replace(/"/g, '""') + '"';
+  return dialect(kind).quote(name);
 }
 
 export function quoteLiteral(kind: DbKind, v: string | null): string {
@@ -61,14 +60,12 @@ export function quoteLiteral(kind: DbKind, v: string | null): string {
 }
 
 export function qualified(kind: DbKind, schema: string, name: string): string {
+  // Databases without schemas (SQLite "main", Firebird file, Mongo) are addressed by name only.
+  const d = dialect(kind);
+  if (!schema || d.family === "firebird" || d.family === "mongo" || (d.family === "sqlite" && schema === "main")) return quoteIdent(kind, name);
   return `${quoteIdent(kind, schema)}.${quoteIdent(kind, name)}`;
 }
 
-const PG_RESERVED = new Set(
-  "all analyse analyze and any array as asc asymmetric both case cast check collate column constraint create current_catalog current_date current_role current_time current_timestamp current_user default deferrable desc distinct do else end except false fetch for foreign from grant group having in initially intersect into lateral leading limit localtime localtimestamp not null offset on only or order placing primary references returning select session_user some symmetric table then to trailing true union unique user using variadic when where window with".split(
-    " ",
-  ),
-);
 
 export interface Stmt {
   from: number;

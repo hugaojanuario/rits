@@ -1,15 +1,23 @@
 // Language server management: one LSP client per (project, language), transported over the
 // backend's framed stdio pipes. Handles server->client requests the CodeMirror client doesn't.
-import { LSPClient, Workspace, LSPPlugin, languageServerExtensions, type Transport, type WorkspaceFile } from "@codemirror/lsp-client";
+import { LSPClient, Workspace, LSPPlugin, hoverTooltips, signatureHelp, serverDiagnostics, formatKeymap, renameKeymap, jumpToDefinitionKeymap, findReferencesKeymap, type Transport, type WorkspaceFile } from "@codemirror/lsp-client";
+import { keymap } from "@codemirror/view";
 
 type WorkspaceFileUpdate = ReturnType<Workspace["syncFiles"]>[number];
 import { ChangeSet, Text, type TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { host, on, P, type ProcExit, type ProcOut, type RpcIn } from "./host";
-import { getCurrentPython, goTool, pyTool } from "./sdk";
+import { getCurrentPython, goTool, pyTool, scriptsDir } from "./sdk";
 import { uid } from "../util";
 
-export type LspLang = "python" | "go";
+export type LspLang = "python" | "go" | "terraform" | "dockerfile" | "yaml";
+
+/** Short server names for the status bar and messages. */
+export const LSP_NAME: Record<LspLang, string> = { python: "Pyright", go: "gopls", terraform: "terraform-ls", dockerfile: "Docker LS", yaml: "YAML LS" };
+export const LSP_LANG_LABEL: Record<LspLang, string> = { python: "Python", go: "Go", terraform: "Terraform", dockerfile: "Dockerfile", yaml: "YAML" };
+
+const COMPOSE_SCHEMA = "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json";
+const K8S_GLOBS = ["k8s/**/*.yaml", "k8s/**/*.yml", "kubernetes/**/*.yaml", "manifests/**/*.yaml", "deploy/**/*.yaml", "*.k8s.yaml", "*.k8s.yml"];
 
 // basedpyright enables a few rules PyCharm users would not expect for plain scripts.
 const PY_OVERRIDES = { reportImplicitRelativeImport: "none", reportMissingModuleSource: "warning" };
@@ -132,6 +140,8 @@ export class LspManager {
   readonly diagnostics = new Map<string, Diag[]>();
   private diagListeners = new Set<() => void>();
   private progressTokens = new Map<string, string>();
+  /** YAML files recognized as Kubernetes manifests by content (added to the kubernetes schema globs). */
+  private k8sFiles = new Set<string>();
 
   constructor(private root: string, private hooks: LspHooks) {}
 
@@ -156,8 +166,27 @@ export class LspManager {
       const py = await pyTool("pyright-langserver");
       return py ? { program: py, args: ["--stdio"] } : null;
     }
-    const gopls = await goTool("gopls");
-    return gopls ? { program: gopls, args: ["serve"] } : null;
+    if (lang === "go") {
+      const gopls = await goTool("gopls");
+      return gopls ? { program: gopls, args: ["serve"] } : null;
+    }
+    const bin: Record<string, [string, string[]]> = {
+      terraform: ["terraform-ls", ["serve"]],
+      dockerfile: ["docker-langserver", ["--stdio"]],
+      yaml: ["yaml-language-server", ["--stdio"]],
+    };
+    const [name, args] = bin[lang];
+    const exe = await host.which(name);
+    return exe ? { program: exe, args } : null;
+  }
+
+  /** Marks a YAML file as a Kubernetes manifest so yaml-language-server validates it against the k8s schema. */
+  markKubernetes(path: string) {
+    const rel = P.rel(this.root, path);
+    if (this.k8sFiles.has(rel)) return;
+    this.k8sFiles.add(rel);
+    const c = this.servers.get("yaml")?.client;
+    if (c?.serverCapabilities) c.notification("workspace/didChangeConfiguration", { settings: { yaml: this.settings("yaml", "yaml") } });
   }
 
   private settings(lang: LspLang, section: string | undefined): unknown {
@@ -168,18 +197,35 @@ export class LspManager {
       basedpyright: { analysis: { autoImportCompletions: true, typeCheckingMode: "standard", diagnosticMode: "openFilesOnly", inlayHints: { variableTypes: false }, diagnosticSeverityOverrides: PY_OVERRIDES } },
       "basedpyright.analysis": { autoImportCompletions: true, typeCheckingMode: "standard", diagnosticMode: "openFilesOnly", diagnosticSeverityOverrides: PY_OVERRIDES },
       gopls: { usePlaceholders: true, completeUnimported: true, staticcheck: false, semanticTokens: false, analyses: { unusedparams: true, unusedvariable: true }, hints: {} },
+      yaml: {
+        validate: true,
+        hover: true,
+        completion: true,
+        format: { enable: true },
+        keyOrdering: false,
+        schemaStore: { enable: true, url: "https://www.schemastore.org/api/json/catalog.json" },
+        schemas: {
+          kubernetes: [...K8S_GLOBS, ...this.k8sFiles],
+          [COMPOSE_SCHEMA]: ["docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"],
+        },
+      },
+      "[yaml]": {},
+      terraform: { validation: { enableEnhancedValidation: true } },
+      "terraform-ls": {},
+      docker: { languageserver: { formatter: { ignoreMultilineInstructions: true } } },
     };
-    if (!section) return lang === "python" ? all.python : all.gopls;
+    if (!section) return ({ python: all.python, go: all.gopls, yaml: all.yaml, terraform: all.terraform, dockerfile: all.docker } as Record<LspLang, unknown>)[lang];
     return all[section] ?? null;
   }
 
   /** Starts (once) and returns the client for a language, or null when the server isn't installed. */
-  async ensure(lang: LspLang): Promise<LSPClient | null> {
+  /** quiet: don't suggest installing the plugin (plain YAML files that are not infra). */
+  async ensure(lang: LspLang, quiet = false): Promise<LSPClient | null> {
     const existing = this.servers.get(lang);
     if (existing) return (await existing.ready) ? existing.client : null;
     const cmd = await this.command(lang);
     if (!cmd) {
-      this.hooks.missing(lang);
+      if (!quiet) this.hooks.missing(lang);
       return null;
     }
     const procId = `lsp-${lang}-${uid()}`;
@@ -201,7 +247,8 @@ export class LspManager {
       rootUri: P.uri(this.root),
       timeout: 20000,
       workspace: (c) => new IdeWorkspace(c, this.hooks),
-      extensions: languageServerExtensions(),
+      // Completion is provided by completion.ts (resolve, auto-import, relevance), not the client's source.
+      extensions: [hoverTooltips(), keymap.of([...formatKeymap, ...renameKeymap, ...jumpToDefinitionKeymap, ...findReferencesKeymap]), signatureHelp(), serverDiagnostics()],
       notificationHandlers: {
         "textDocument/publishDiagnostics": (_c, params: { uri: string; diagnostics: any[] }) => {
           this.recordDiagnostics(params.uri, params.diagnostics);
@@ -273,12 +320,19 @@ export class LspManager {
       try {
         // Put the project interpreter first on PATH so tools that shell out to "python" find it.
         const py = getCurrentPython()?.path;
-        const env: Record<string, string> = py && lang === "python" ? { RITS_PATH_PREPEND: [P.dir(py), P.join(P.dir(py), "Scripts")].map(P.win).join(";") } : {};
+        const env: Record<string, string> = py && lang === "python" ? { RITS_PATH_PREPEND: [...new Set([P.dir(py), scriptsDir(py)])].map(P.win).join(";") } : {};
         await host.spawn({ id: procId, program: cmd.program, args: cmd.args, cwd: this.root, mode: "rpc", env });
         client.connect(transport);
         this.hooks.progress(lang, "Iniciando servidor de linguagem");
         await client.initializing;
-        client.notification("workspace/didChangeConfiguration", { settings: lang === "python" ? { python: this.settings(lang, "python"), basedpyright: this.settings(lang, "basedpyright") } : { gopls: this.settings(lang, "gopls") } });
+        const conf: Record<LspLang, () => unknown> = {
+          python: () => ({ python: this.settings(lang, "python"), basedpyright: this.settings(lang, "basedpyright") }),
+          go: () => ({ gopls: this.settings(lang, "gopls") }),
+          yaml: () => ({ yaml: this.settings(lang, "yaml") }),
+          terraform: () => ({ terraform: this.settings(lang, "terraform") }),
+          dockerfile: () => ({ docker: this.settings(lang, "docker") }),
+        };
+        client.notification("workspace/didChangeConfiguration", { settings: conf[lang]() });
         this.hooks.progress(lang, null);
         return true;
       } catch (err) {
@@ -316,6 +370,23 @@ export class LspManager {
         ...(p.capabilities.textDocument ?? {}),
         codeAction: { dynamicRegistration: false, isPreferredSupport: true, resolveSupport: { properties: ["edit"] }, codeActionLiteralSupport: { codeActionKind: { valueSet: ["", "quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports", "source.fixAll"] } } },
         references: { dynamicRegistration: false },
+        completion: {
+          dynamicRegistration: false,
+          contextSupport: true,
+          completionItem: {
+            snippetSupport: true,
+            commitCharactersSupport: true,
+            documentationFormat: ["markdown", "plaintext"],
+            deprecatedSupport: true,
+            preselectSupport: true,
+            tagSupport: { valueSet: [1] },
+            insertReplaceSupport: false,
+            labelDetailsSupport: true,
+            resolveSupport: { properties: ["documentation", "detail", "additionalTextEdits"] },
+          },
+          completionItemKind: { valueSet: Array.from({ length: 25 }, (_, i) => i + 1) },
+          completionList: { itemDefaults: ["commitCharacters", "editRange", "insertTextFormat"] },
+        },
         documentSymbol: { dynamicRegistration: false, hierarchicalDocumentSymbolSupport: true },
         implementation: { dynamicRegistration: false },
         typeDefinition: { dynamicRegistration: false },
@@ -402,7 +473,11 @@ export class LspManager {
 
 export function lspLangFor(path: string): LspLang | null {
   const e = P.ext(path);
+  const base = P.base(path).toLowerCase();
   if (e === "py" || e === "pyi") return "python";
   if (e === "go") return "go";
+  if (e === "tf" || e === "tfvars") return "terraform";
+  if (base === "dockerfile" || base === "containerfile" || base.endsWith(".dockerfile") || base.startsWith("dockerfile.")) return "dockerfile";
+  if (e === "yaml" || e === "yml") return "yaml";
   return null;
 }

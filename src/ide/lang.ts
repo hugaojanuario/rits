@@ -102,6 +102,77 @@ export interface LangInfo {
 
 const legacy = (m: Parameters<typeof StreamLanguage.define>[0]) => () => StreamLanguage.define(m);
 
+/** HCL / Terraform: blocks, attributes, strings with ${} interpolation, heredocs, comments. */
+const HCL_BLOCKS = new Set(["resource", "data", "variable", "output", "locals", "module", "provider", "terraform", "required_providers", "backend", "moved", "import", "check", "removed", "dynamic", "content", "lifecycle", "provisioner", "connection"]);
+const HCL_KEYWORDS = new Set(["for", "in", "if", "else", "endif", "endfor"]);
+const HCL_ATOMS = new Set(["true", "false", "null"]);
+const HCL_TYPES = new Set(["string", "number", "bool", "list", "map", "set", "object", "tuple", "any"]);
+interface HclState {
+  inString: boolean;
+  interp: number;
+  heredoc: string | null;
+  comment: boolean;
+}
+const hcl = {
+  name: "hcl",
+  startState: (): HclState => ({ inString: false, interp: 0, heredoc: null, comment: false }),
+  token(stream: any, st: HclState): string | null {
+    if (st.comment) {
+      if (stream.match(/^.*?\*\//)) st.comment = false;
+      else stream.skipToEnd();
+      return "comment";
+    }
+    if (st.heredoc) {
+      if (stream.sol() && stream.match(new RegExp(`^\\s*${st.heredoc}\\s*$`))) {
+        st.heredoc = null;
+        return "string";
+      }
+      if (stream.match("${")) return (st.interp++, "meta");
+      stream.next();
+      return "string";
+    }
+    if (st.inString && !st.interp) {
+      if (stream.match("${") || stream.match("%{")) return (st.interp++, "meta");
+      if (stream.match(/^\\./)) return "string.special";
+      const ch = stream.next();
+      if (ch === '"') st.inString = false;
+      return "string";
+    }
+    if (stream.eatSpace()) return null;
+    if (st.interp && stream.peek() === "}") {
+      stream.next();
+      st.interp--;
+      return "meta";
+    }
+    if (stream.match("#") || stream.match("//")) return (stream.skipToEnd(), "comment");
+    if (stream.match("/*")) return ((st.comment = true), "comment");
+    const hd = stream.match(/^<<-?\s*([A-Z_]+)/);
+    if (hd) return ((st.heredoc = hd[1]), "string");
+    if (stream.peek() === '"') {
+      stream.next();
+      st.inString = true;
+      return "string";
+    }
+    if (stream.match(/^-?\d+(\.\d+)?([eE][+-]?\d+)?/)) return "number";
+    const w = stream.match(/^[A-Za-z_][\w-]*/);
+    if (w) {
+      const word = w[0];
+      if (HCL_ATOMS.has(word)) return "atom";
+      if (HCL_KEYWORDS.has(word)) return "keyword";
+      if (stream.sol !== undefined && HCL_BLOCKS.has(word) && /^\s*("|\{|[A-Za-z_])/.test(stream.string.slice(stream.pos)) && stream.string.slice(0, stream.start).trim() === "") return "keyword";
+      if (HCL_TYPES.has(word)) return "typeName";
+      if (/^\s*\(/.test(stream.string.slice(stream.pos))) return "variableName.function";
+      if (/^\s*=(?!=)/.test(stream.string.slice(stream.pos))) return "propertyName";
+      if (["var", "local", "module", "data", "each", "count", "path", "self", "terraform"].includes(word) && stream.peek() === ".") return "variableName.special";
+      return "variableName";
+    }
+    if (stream.match(/^(==|!=|>=|<=|&&|\|\||=>|[=+\-*/%<>!?:])/)) return "operator";
+    stream.next();
+    return null;
+  },
+  languageData: { commentTokens: { line: "#", block: { open: "/*", close: "*/" } }, closeBrackets: { brackets: ["(", "[", "{", '"'] } },
+};
+
 const LANGS: Record<string, LangInfo> = {
   python: { id: "python", label: "Python", ext: () => python(), indent: "    " },
   go: { id: "go", label: "Go", ext: () => go(), indent: "\t" },
@@ -117,6 +188,10 @@ const LANGS: Record<string, LangInfo> = {
   shell: { id: "shellscript", label: "Shell", ext: legacy(shell), indent: "  " },
   powershell: { id: "powershell", label: "PowerShell", ext: legacy(powerShell), indent: "    " },
   dockerfile: { id: "dockerfile", label: "Dockerfile", ext: legacy(dockerFile), indent: "  " },
+  terraform: { id: "terraform", label: "Terraform", ext: legacy(hcl as never), indent: "  " },
+  tfvars: { id: "terraform-vars", label: "Terraform vars", ext: legacy(hcl as never), indent: "  " },
+  hcl: { id: "hcl", label: "HCL", ext: legacy(hcl as never), indent: "  " },
+  ignore: { id: "ignore", label: "Ignore", ext: legacy(properties), indent: "  " },
   properties: { id: "properties", label: "Properties", ext: legacy(properties), indent: "  " },
   gomod: { id: "go.mod", label: "Go Module", ext: legacy(properties), indent: "\t" },
   text: { id: "plaintext", label: "Texto", ext: () => [], indent: "    " },
@@ -127,12 +202,14 @@ const EXT: Record<string, string> = {
   md: "markdown", markdown: "markdown", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript", ts: "typescript",
   tsx: "typescript", html: "html", htm: "html", vue: "html", css: "css", scss: "css", sql: "sql", toml: "toml", sh: "shell",
   bash: "shell", zsh: "shell", ps1: "powershell", psm1: "powershell", ini: "properties", cfg: "properties", properties: "properties",
-  env: "properties", conf: "properties",
+  env: "properties", conf: "properties", tf: "terraform", tfvars: "tfvars", hcl: "hcl", nomad: "hcl", tftest: "hcl",
 };
 
 export function langFor(path: string): LangInfo {
   const base = P.base(path).toLowerCase();
-  if (base === "dockerfile" || base.endsWith(".dockerfile")) return LANGS.dockerfile;
+  if (base === "dockerfile" || base === "containerfile" || base.endsWith(".dockerfile") || base.startsWith("dockerfile.")) return LANGS.dockerfile;
+  if (base === ".dockerignore" || base === ".helmignore") return LANGS.ignore;
+  if (base.endsWith(".tf.json")) return LANGS.json;
   if (base === "go.mod" || base === "go.work") return LANGS.gomod;
   if (base === ".env" || base.startsWith(".env.")) return LANGS.properties;
   if (base === "makefile") return LANGS.shell;

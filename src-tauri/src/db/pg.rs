@@ -1,4 +1,4 @@
-use super::{err_chain, ColumnInfo, CompletionTable, DbObject, IndexInfo, QueryResult, ServerInfo, MAX_ROWS};
+use super::{err_chain, ColumnInfo, CompletionTable, DbObject, DiagramInfo, DiagramTable, ForeignKey, IndexInfo, QueryResult, ServerInfo, MAX_ROWS};
 use crate::store::ConnConfig;
 use std::time::{Duration, Instant};
 use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
@@ -190,6 +190,56 @@ impl PgConn {
                 comment: x.get(5),
             })
             .collect())
+    }
+
+    pub async fn diagram(&self, schema: &str) -> Result<DiagramInfo, String> {
+        let cols = self
+            .rows(
+                "SELECT cl.relname::text, a.attname::text, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull,
+                        EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid = cl.oid AND i.indisprimary AND a.attnum = ANY(i.indkey)),
+                        CASE cl.relkind WHEN 'v' THEN 'view' WHEN 'm' THEN 'matview' ELSE 'table' END,
+                        col_description(cl.oid, a.attnum)
+                 FROM pg_class cl JOIN pg_namespace n ON n.oid = cl.relnamespace
+                 JOIN pg_attribute a ON a.attrelid = cl.oid AND a.attnum > 0 AND NOT a.attisdropped
+                 WHERE n.nspname = $1 AND cl.relkind IN ('r','p','v','m','f') AND NOT cl.relispartition
+                 ORDER BY cl.relname, a.attnum",
+                &[schema],
+            )
+            .await?;
+        let mut tables: Vec<DiagramTable> = vec![];
+        for x in &cols {
+            let t: String = x.get(0);
+            if tables.last().map(|l| l.name != t).unwrap_or(true) {
+                tables.push(DiagramTable { name: t.clone(), kind: x.get(5), columns: vec![] });
+            }
+            tables.last_mut().unwrap().columns.push(ColumnInfo {
+                name: x.get(1),
+                data_type: x.get(2),
+                nullable: x.get(3),
+                default: None,
+                pk: x.get(4),
+                comment: x.get(6),
+            });
+        }
+        let fks = self
+            .rows(
+                "SELECT con.conname::text, cl.relname::text, rn.nspname::text, rcl.relname::text,
+                        ARRAY(SELECT a.attname::text FROM unnest(con.conkey) WITH ORDINALITY k(n, o)
+                              JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.n ORDER BY k.o),
+                        ARRAY(SELECT a.attname::text FROM unnest(con.confkey) WITH ORDINALITY k(n, o)
+                              JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.n ORDER BY k.o)
+                 FROM pg_constraint con
+                 JOIN pg_class cl ON cl.oid = con.conrelid JOIN pg_namespace n ON n.oid = cl.relnamespace
+                 JOIN pg_class rcl ON rcl.oid = con.confrelid JOIN pg_namespace rn ON rn.oid = rcl.relnamespace
+                 WHERE con.contype = 'f' AND n.nspname = $1 ORDER BY 2, 1",
+                &[schema],
+            )
+            .await?;
+        let fks = fks
+            .iter()
+            .map(|x| ForeignKey { name: x.get(0), table: x.get(1), ref_schema: x.get(2), ref_table: x.get(3), columns: x.get(4), ref_columns: x.get(5) })
+            .collect();
+        Ok(DiagramInfo { tables, fks })
     }
 
     pub async fn indexes(&self, schema: &str, table: &str) -> Result<Vec<IndexInfo>, String> {

@@ -9,6 +9,7 @@ import { documentSymbols, symIcon, type Sym } from "./structure";
 import { islandsTheme, langExtensions, langFor } from "./lang";
 import { openSettings } from "./settings";
 import type { Workbench } from "./workbench";
+import { displayShortcut } from "./keymap";
 
 let fileCache: { root: string; at: number; files: string[] } | null = null;
 async function projectFiles(wb: Workbench) {
@@ -89,6 +90,7 @@ function actions(wb: Workbench): { label: string; icon: string; run: () => void;
     { label: "Restaurar banco de dados", icon: "restore", run: () => wb.db.restore() },
     { label: "Configurações", icon: "general/settings", shortcut: "Ctrl+Alt+S", run: () => openSettings(wb) },
     { label: "Plugins", icon: "plugins", run: () => openSettings(wb, "plugins") },
+    ...(wb.docker ? [{ label: "Docker: containers", icon: "docker", run: () => wb.show("docker", true) }] : [{ label: "Instalar plugin Docker", icon: "docker", run: () => openSettings(wb, "plugins", "docker") }]),
     { label: "Interpretador Python", icon: "python/pythonClosed", run: () => openSettings(wb, "python") },
     { label: "Inspecionar código", icon: "general/inspections", run: () => wb.problems.inspectProject() },
     { label: "Alternar tema claro/escuro", icon: "sun", run: () => (window as any).__toggleTheme?.() },
@@ -165,9 +167,9 @@ export async function searchEverywhere(wb: Workbench, tab: "all" | "files" | "sy
     if ((t === "all" || t === "actions") && q) {
       for (const a of actions(wb)) {
         const s = fuzzyScore(a.label, ql);
-        if (s) out.push({ label: a.label, detail: a.shortcut, icon: a.icon, score: s - 100, section: "Ações", run: a.run });
+        if (s) out.push({ label: a.label, detail: displayShortcut(a.shortcut), icon: a.icon, score: s - 100, section: "Ações", run: a.run });
       }
-    } else if (t === "actions") for (const a of actions(wb)) out.push({ label: a.label, detail: a.shortcut, icon: a.icon, score: 0, section: "Ações", run: a.run });
+    } else if (t === "actions") for (const a of actions(wb)) out.push({ label: a.label, detail: displayShortcut(a.shortcut), icon: a.icon, score: 0, section: "Ações", run: a.run });
     if ((t === "all" || t === "symbols") && q.length >= 2) {
       for (const lang of ["python", "go"] as const) {
         if (wb.lsp.status(lang) !== "ready") continue;

@@ -6,7 +6,8 @@ import {
 } from "@codemirror/view";
 import { EditorState, Compartment, StateField, StateEffect, RangeSet, RangeSetBuilder, EditorSelection, type Extension, type Text } from "@codemirror/state";
 import { indentOnInput, bracketMatching, foldGutter, foldKeymap, syntaxTree } from "@codemirror/language";
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, startCompletion } from "@codemirror/autocomplete";
+import { acceptCompletion, closeBrackets, closeBracketsKeymap, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete";
+import { completionComp, completionExtension, tabAccepts } from "./completion";
 import {
   defaultKeymap, history, historyKeymap, indentWithTab, toggleComment, toggleBlockComment, undo, redo, copyLineDown,
   deleteLine, moveLineUp, moveLineDown, selectParentSyntax, selectLine,
@@ -17,9 +18,11 @@ import { h } from "../util";
 import { icon, fileIconName } from "../icons";
 import { confirmDialog, contextMenu, popupList, toast, type MenuItem } from "../ui";
 import type { Tab } from "../tabs";
-import { host, P } from "./host";
+import { host, IS_MAC, P, REVEAL_LABEL } from "./host";
+import { keymapId } from "./keymap";
 import { langFor, langExtensions, islandsTheme, type LangInfo } from "./lang";
 import { lspLangFor, type LspLang } from "./lsp";
+import { infraActions, infraKind, isK8s, INFRA_ICON, INFRA_LABEL } from "./infra";
 import { pyTool } from "./sdk";
 import type { Workbench } from "./workbench";
 
@@ -220,6 +223,8 @@ export class CodeEditor {
   tab: Tab;
   el = h("div.code-pane");
   private host_ = h("div.code-host");
+  /** Quick actions for Dockerfile / Compose / Terraform / Kubernetes files. */
+  private infraBar = h("div.infra-bar.hidden");
   private lspComp = new Compartment();
   private roComp = new Compartment();
   private saveTimer: number | undefined;
@@ -232,7 +237,7 @@ export class CodeEditor {
     this.lang = langFor(path);
     this.lspLang = lspLangFor(path);
     this.iconName = fileIconName(P.base(path));
-    this.el.append(this.host_);
+    this.el.append(this.infraBar, this.host_);
     this.tab = {
       id: "file:" + path.toLowerCase(),
       title: P.base(path),
@@ -251,7 +256,7 @@ export class CodeEditor {
       onClose: () => this.dispose(),
       menu: () => [
         { label: "Revelar no Projeto", icon: "general/locate", action: () => this.wb.projectView.reveal(this.path) },
-        { label: "Abrir no Explorer", action: () => host.reveal(this.path) },
+        { label: REVEAL_LABEL, action: () => host.reveal(this.path) },
         { label: "Copiar caminho", icon: "general/copy", action: () => navigator.clipboard.writeText(P.win(this.path)) },
         { separator: true },
         ...this.runMenu(),
@@ -279,6 +284,7 @@ export class CodeEditor {
     this.encoding = ft.encoding;
     this.savedText = ft.text;
     this.create(ft.text);
+    this.renderInfraBar();
     this.attachLsp();
     this.refreshVcs(true);
     return true;
@@ -351,7 +357,7 @@ export class CodeEditor {
       indentOnInput(),
       bracketMatching(),
       closeBrackets(),
-      autocompletion({ activateOnTyping: true, maxRenderedOptions: 100, icons: true }),
+      completionComp.of(completionExtension()),
       rectangularSelection(),
       crosshairCursor(),
       highlightActiveLine(),
@@ -393,31 +399,49 @@ export class CodeEditor {
 
   private keymap() {
     const c = (name: string) => () => (this.command(name), true);
+    // Bindings checked at key time, so switching the keymap in Settings applies to open editors.
+    type Run = (v: EditorView) => boolean;
+    const jb = (run: Run): Run => (v) => keymapId() === "jetbrains" && run(v);
+    const vs = (run: Run): Run => (v) => keymapId() === "vscode" && run(v);
     return [
-      { key: "Mod-d", run: copyLineDown, preventDefault: true },
-      { key: "Mod-y", run: deleteLine, preventDefault: true },
+      // Tab accepts the selected completion (JetBrains), when enabled in Settings › Editor
+      { key: "Tab", run: (v: EditorView) => tabAccepts() && completionStatus(v.state) === "active" && acceptCompletion(v) },
+      // JetBrains
+      { key: "Mod-d", run: jb(copyLineDown), preventDefault: true },
+      { key: "Mod-y", run: jb(deleteLine), preventDefault: true },
+      { key: "Mod-w", run: jb(selectParentSyntax), preventDefault: true },
+      { key: "Alt-Shift-ArrowUp", run: jb(moveLineUp) },
+      { key: "Alt-Shift-ArrowDown", run: jb(moveLineDown) },
+      { key: "Mod-Shift-ArrowUp", run: jb(moveLineUp) },
+      { key: "Mod-Shift-ArrowDown", run: jb(moveLineDown) },
+      { key: "Mod-b", run: jb(c("definition")), preventDefault: true },
+      { key: "Mod-Alt-b", run: jb(c("implementation")), preventDefault: true },
+      { key: "Mod-Shift-b", run: jb(c("typeDefinition")), preventDefault: true },
+      { key: "Alt-F7", run: jb(c("usages")), preventDefault: true },
+      { key: "Shift-F6", run: jb(c("rename")), preventDefault: true },
+      { key: "Mod-p", run: jb(c("signature")), preventDefault: true },
+      { key: "Mod-q", run: jb(c("hover")), preventDefault: true },
+      { key: "Alt-Enter", run: jb(c("quickfix")), preventDefault: true },
+      { key: "Mod-Alt-l", run: jb(() => (this.format(), true)), preventDefault: true },
+      { key: "Mod-Alt-o", run: jb(() => (this.organizeImports(), true)), preventDefault: true },
+      { key: "Mod-F8", run: jb(() => (this.toggleBreakpointAtCursor(), true)), preventDefault: true },
+      { key: "Mod-r", run: jb(c("replace")), preventDefault: true },
+      { key: "Mod-Space", run: jb(startCompletion) },
+      // VS Code (Mod-d next occurrence, Alt-↑/↓, Shift-Alt-↓ and Mod-Shift-k come from the default keymaps below)
+      { key: "Mod-F12", run: vs(c("implementation")), preventDefault: true },
+      { key: "Shift-F12", run: vs(c("usages")), preventDefault: true },
+      { key: "F2", run: vs(c("rename")), preventDefault: true },
+      { key: "Mod-.", run: vs(c("quickfix")), preventDefault: true },
+      { key: "Mod-Shift-Space", run: vs(c("signature")), preventDefault: true },
+      { key: "Shift-Alt-f", run: vs(() => (this.format(), true)), preventDefault: true },
+      { key: "Shift-Alt-o", run: vs(() => (this.organizeImports(), true)), preventDefault: true },
+      { key: IS_MAC ? "Mod-Alt-f" : "Mod-h", run: vs(c("replace")), preventDefault: true },
+      { key: IS_MAC ? "Ctrl-Shift-Mod-ArrowRight" : "Shift-Alt-ArrowRight", run: vs(selectParentSyntax), preventDefault: true },
+      // both
       { key: "Mod-/", run: toggleComment },
       { key: "Mod-Shift-/", run: toggleBlockComment },
-      { key: "Mod-w", run: selectParentSyntax, preventDefault: true },
-      { key: "Alt-Shift-ArrowUp", run: moveLineUp },
-      { key: "Alt-Shift-ArrowDown", run: moveLineDown },
-      { key: "Mod-Shift-ArrowUp", run: moveLineUp },
-      { key: "Mod-Shift-ArrowDown", run: moveLineDown },
       { key: "Mod-l", run: selectLine, preventDefault: true },
-      { key: "Mod-b", run: c("definition"), preventDefault: true },
       { key: "F12", run: c("definition") },
-      { key: "Mod-Alt-b", run: c("implementation"), preventDefault: true },
-      { key: "Mod-Shift-b", run: c("typeDefinition"), preventDefault: true },
-      { key: "Alt-F7", run: c("usages"), preventDefault: true },
-      { key: "Shift-F6", run: c("rename"), preventDefault: true },
-      { key: "Mod-p", run: c("signature"), preventDefault: true },
-      { key: "Mod-q", run: c("hover"), preventDefault: true },
-      { key: "Alt-Enter", run: c("quickfix"), preventDefault: true },
-      { key: "Mod-Alt-l", run: () => (this.format(), true), preventDefault: true },
-      { key: "Mod-Alt-o", run: () => (this.organizeImports(), true), preventDefault: true },
-      { key: "Mod-F8", run: () => (this.toggleBreakpointAtCursor(), true), preventDefault: true },
-      { key: "Mod-r", run: c("replace"), preventDefault: true },
-      { key: "Mod-Space", run: startCompletion },
       { key: "Mod-Shift-z", run: redo, preventDefault: true },
       ...closeBracketsKeymap,
       ...defaultKeymap.filter((k) => k.key !== "Mod-Enter"),
@@ -447,6 +471,7 @@ export class CodeEditor {
       { label: "Colar", icon: "general/paste", shortcut: "Ctrl+V", action: () => navigator.clipboard.readText().then((t) => this.view.dispatch(this.view.state.replaceSelection(t))) },
       { separator: true },
       ...this.runMenu(),
+      ...(this.infraKind() ? [{ label: INFRA_LABEL[this.infraKind()!], icon: INFRA_ICON[this.infraKind()!], submenu: infraActions(this.wb, this.path, this.infraKind()!) } as MenuItem] : []),
       { label: "Alternar breakpoint", icon: "breakpoints/breakpoint", shortcut: "Ctrl+F8", action: () => this.toggleBreakpointAtCursor() },
       { separator: true },
       { label: "Abrir no terminal", icon: "toolwindows/terminal", action: () => this.wb.terminals.newTab(P.dir(this.path)) },
@@ -464,9 +489,30 @@ export class CodeEditor {
   }
 
   // ---------- LSP ----------
+  infraKind() {
+    return infraKind(this.path, this.view?.state.doc.toString() ?? this.savedText);
+  }
+
+  private renderInfraBar() {
+    const kind = this.infraKind();
+    this.infraBar.classList.toggle("hidden", !kind);
+    if (!kind) return this.infraBar.replaceChildren();
+    const acts = infraActions(this.wb, this.path, kind);
+    this.infraBar.replaceChildren(
+      h("span.ib-kind", null, icon(INFRA_ICON[kind]), INFRA_LABEL[kind]),
+      ...acts.filter((a) => a.primary).map((a) => h("button.ib-btn", { onclick: () => a.action?.() }, a.icon ? icon(a.icon) : "", a.label!.replace(/…$/, ""))),
+      h("span.grow"),
+      h("button.ib-btn", { title: "Mais ações", onclick: (e: MouseEvent) => contextMenu(e.clientX, e.clientY + 8, acts) }, icon("general/moreHorizontal")),
+    );
+  }
+
   async attachLsp() {
     if (!this.lspLang || this.disposed) return;
-    const client = await this.wb.lsp.ensure(this.lspLang);
+    const text = this.view?.state.doc.toString() ?? this.savedText;
+    if (this.lspLang === "yaml" && isK8s(text)) this.wb.lsp.markKubernetes(this.path);
+    // Plain YAML (CI files, configs...) uses the YAML server when installed, without nagging when it isn't.
+    const quiet = this.lspLang === "yaml" && !infraKind(this.path, text);
+    const client = await this.wb.lsp.ensure(this.lspLang, quiet);
     if (!client || this.disposed || !this.view) return;
     this.view.dispatch({ effects: this.lspComp.reconfigure(client.plugin(P.uri(this.path), this.lang.id)) });
     this.wb.renderStatus();
@@ -655,6 +701,12 @@ export class CodeEditor {
       }
       return;
     }
+    if (this.lang.id === "terraform" || this.lang.id === "terraform-vars") {
+      const r = await host.capture("terraform", ["fmt", "-"], P.dir(this.path), text, 30).catch((e) => ({ code: -1, stdout: "", stderr: String(e) }));
+      if (r.code !== 0) return toast(r.stderr.trim().split("\n").slice(-3).join("\n") || "terraform fmt falhou", "error", 7000);
+      this.replaceAll(r.stdout);
+      return;
+    }
     if (this.lang.id === "json") {
       try {
         this.replaceAll(JSON.stringify(JSON.parse(text), null, 2) + "\n");
@@ -735,6 +787,7 @@ export class CodeEditor {
       this.lastWrite = Date.now();
       await host.write(this.path, text, this.crlf);
       this.savedText = text;
+      this.renderInfraBar();
       this.updateTabState();
       const plugin = LSPPlugin.get(this.view);
       plugin?.client.notification("textDocument/didSave", { textDocument: { uri: P.uri(this.path) }, text });
@@ -863,7 +916,12 @@ export class CodeEditor {
 
 export class Editors {
   private map = new Map<string, CodeEditor>();
-  constructor(private wb: Workbench) {}
+  constructor(private wb: Workbench) {
+    // Completion settings apply to open editors right away.
+    window.addEventListener("rits-completion", () => {
+      for (const ed of this.map.values()) ed.view?.dispatch({ effects: completionComp.reconfigure(completionExtension()) });
+    });
+  }
 
   key(path: string) {
     return P.norm(path).toLowerCase();

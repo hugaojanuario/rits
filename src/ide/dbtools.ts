@@ -2,12 +2,13 @@
 // tabs, and the "Services" tool window (backup tasks, query history, SQL log).
 import type { ConnConfig } from "../api";
 import { openBackupWizard, openRestoreWizard, setTaskStartedHook, taskPanel } from "../backup";
-import { openConnectionDialog } from "../connDialog";
+import { openConnectionDialog, pickDbKind } from "../connDialog";
 import { createConsole, type ConsoleState, type ConsoleTab } from "../console";
 import { Explorer } from "../explorer";
 import { icon } from "../icons";
 import { store } from "../state";
 import { createDdlTab, createTableView, type ObjectRef } from "../tableView";
+import { createDiagramTab } from "../diagram";
 import { toast } from "../ui";
 import { debounce, formatDuration, h } from "../util";
 import type { Workbench } from "./workbench";
@@ -22,12 +23,13 @@ export class DbTools {
 
   constructor(private wb: Workbench) {
     this.explorer = new Explorer({
-      newConnection: () => this.newConnection(),
+      newConnection: (anchor) => this.newConnection(anchor),
       editConnection: (c) => openConnectionDialog(c),
       openConsole: (c, db, schema, text, run) => this.openConsole(c, { db, schema, text }, run),
       openObject: (c, ref) => this.openObject(c, ref),
       backup: (c, db, schemas, tables) => openBackupWizard(c, db, schemas, tables),
       restore: (c, db) => openRestoreWizard(c, db),
+      openDiagram: (c, db, schema, focus) => this.openDiagram(c, db, schema, focus),
     });
     wb.register({
       id: "database",
@@ -37,7 +39,7 @@ export class DbTools {
       shortcut: "Alt+2",
       body: h("div.tw-body", null, this.explorer.el),
       actions: () => [
-        h("button.icon-btn", { title: "Nova conexão", onclick: () => this.newConnection() }, icon("general/add")),
+        h("button.icon-btn", { title: "Nova conexão", onclick: (e: MouseEvent) => this.newConnection(e.currentTarget as HTMLElement) }, icon("general/add")),
         h("button.icon-btn", { title: "Atualizar (F5)", onclick: () => this.explorer.refreshSelected() }, icon("general/refresh")),
         h("button.icon-btn", { title: "Abrir console (Ctrl+Shift+L)", onclick: () => this.explorer.consoleForSelected() }, icon("console")),
         h("button.icon-btn", { title: "Backup", onclick: () => this.backup() }, icon("backup")),
@@ -62,7 +64,18 @@ export class DbTools {
     this.boot();
   }
 
+  openDiagram(c: ConnConfig, db: string, schema: string, focus?: string) {
+    const tab = createDiagramTab(c, db, schema, {
+      focus,
+      openTable: (name, kind) => this.openObject(c, { connId: c.id, db, schema, name, kind }),
+    });
+    const existing = this.wb.tabs.find(tab.id);
+    if (existing) this.wb.tabs.close(existing);
+    this.wb.tabs.open(tab);
+  }
+
   private async boot() {
+    store.setProject(this.wb.root);
     try {
       await store.load();
     } catch (e) {
@@ -79,9 +92,15 @@ export class DbTools {
     this.wb.saveSettings();
   }, 500);
 
-  newConnection() {
-    this.wb.show("database");
-    openConnectionDialog(undefined, () => this.explorer.rebuild());
+  /** Picks the database type in a small popup (at the + button), then opens the connection dialog. */
+  newConnection(anchor?: HTMLElement) {
+    // Read the position first: showing the tool window re-renders its header (and the button).
+    // Centered on the Database panel, below its header, so the side stripe stays visible.
+    const r = anchor?.isConnected ? anchor.getBoundingClientRect() : null;
+    const panel = anchor?.closest(".island")?.getBoundingClientRect();
+    const at = r ? { x: panel ? panel.left + (panel.width - 210) / 2 : r.right - 210, y: r.bottom + 2 } : { x: Math.max(16, innerWidth / 2 - 105), y: 110 };
+    if (!this.wb.isVisible("database")) this.wb.show("database");
+    pickDbKind(at, (kind, preset) => openConnectionDialog(undefined, () => this.explorer.rebuild(), { kind, preset }));
   }
 
   openConsole(c: ConnConfig, init: Partial<ConsoleState>, run = false) {

@@ -5,7 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { h, uid } from "../util";
 import { icon } from "../icons";
 import { contextMenu } from "../ui";
-import { host, on, P } from "./host";
+import { host, IS_MAC, on, P } from "./host";
 import { scriptsDir } from "./sdk";
 import type { Workbench } from "./workbench";
 
@@ -24,7 +24,7 @@ function xtermTheme() {
   const v = (n: string) => css.getPropertyValue(n).trim();
   const dark = document.documentElement.dataset.theme !== "light";
   return {
-    background: v("--island"),
+    background: v("--term-bg") || v("--island"),
     foreground: v("--editor-fg"),
     cursor: v("--icon"),
     selectionBackground: v("--editor-selection"),
@@ -81,6 +81,7 @@ export class Terminals {
       lineHeight: 1.2,
       cursorBlink: true,
       allowProposedApi: true,
+      allowTransparency: true,
       scrollback: 10000,
       theme: xtermTheme(),
     });
@@ -104,12 +105,13 @@ export class Terminals {
     term.onResize(({ cols, rows }) => t.alive && host.ptyResize(id, cols, rows).catch(() => {}));
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
-      if (e.ctrlKey && e.key === "c" && term.hasSelection()) {
+      const clip = IS_MAC ? e.metaKey : e.ctrlKey;
+      if (clip && e.key === "c" && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection());
         term.clearSelection();
         return false;
       }
-      if (e.ctrlKey && e.key === "v") {
+      if (clip && e.key === "v") {
         navigator.clipboard.readText().then((x) => host.ptyWrite(id, x));
         return false;
       }

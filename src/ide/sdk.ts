@@ -1,5 +1,5 @@
 // SDK detection (Python interpreters, Go) and language "plugins" (language servers, debuggers, tools).
-import { host, on, P, type ProcExit, type ProcOut } from "./host";
+import { EXE, host, IS_WIN, on, P, type ProcExit, type ProcOut } from "./host";
 import { uid } from "../util";
 
 export interface PyInterp {
@@ -29,20 +29,37 @@ async function pyInfo(path: string): Promise<PyInterp | null> {
 }
 
 export function projectVenvCandidates(root: string): string[] {
-  return [".venv", "venv", "env", ".env"].map((d) => P.join(root, d, "Scripts", "python.exe"));
+  return [".venv", "venv", "env", ".env"].map((d) => P.join(root, d, IS_WIN ? "Scripts/python.exe" : "bin/python"));
+}
+
+/** Interpreters outside PATH on macOS/Linux: Homebrew, python.org framework builds and pyenv. */
+async function unixInterpreters(): Promise<string[]> {
+  const out: string[] = [];
+  const home = (await host.env()).home;
+  const dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/Library/Frameworks/Python.framework/Versions/Current/bin"];
+  for (const d of dirs) {
+    const entries = await host.list(d).catch(() => []);
+    for (const e of entries) if (/^python3\.\d+$/.test(e.name)) out.push(P.join(d, e.name));
+  }
+  for (const v of await host.list(P.join(home, ".pyenv/versions")).catch(() => [])) out.push(P.join(v.path, "bin/python"));
+  return out;
 }
 
 export async function findInterpreters(root?: string): Promise<PyInterp[]> {
   const paths = new Set<string>();
   if (root) for (const c of projectVenvCandidates(root)) if (await host.exists(c)) paths.add(P.norm(c));
-  try {
-    const r = await host.capture("py", ["-0p"], "", undefined, 10);
-    for (const line of r.stdout.split(/\r?\n/)) {
-      const m = /([A-Za-z]:\\.+python(w)?\.exe)\s*$/i.exec(line.trim());
-      if (m) paths.add(P.norm(m[1]));
+  if (IS_WIN) {
+    try {
+      const r = await host.capture("py", ["-0p"], "", undefined, 10);
+      for (const line of r.stdout.split(/\r?\n/)) {
+        const m = /([A-Za-z]:\\.+python(w)?\.exe)\s*$/i.exec(line.trim());
+        if (m) paths.add(P.norm(m[1]));
+      }
+    } catch {
+      /* py launcher missing */
     }
-  } catch {
-    /* py launcher missing */
+  } else {
+    for (const p of await unixInterpreters().catch(() => [])) if (await host.exists(p)) paths.add(P.norm(p));
   }
   for (const n of ["python", "python3"]) {
     const w = await host.which(n);
@@ -72,8 +89,10 @@ function cmpVer(a: string, b: string) {
   return 0;
 }
 
+/** Folder with the interpreter's console scripts (venv "Scripts" on Windows, "bin" elsewhere). */
 export function scriptsDir(python: string) {
   const d = P.dir(python);
+  if (!IS_WIN) return d;
   return P.base(d).toLowerCase() === "scripts" ? d : P.join(d, "Scripts");
 }
 
@@ -115,7 +134,7 @@ export interface Component {
 }
 
 export interface LangPlugin {
-  id: "python" | "go";
+  id: "python" | "go" | "infra";
   name: string;
   icon: string;
   description: string;
@@ -142,7 +161,7 @@ const pip = (pkg: string) => (currentPython ? { program: currentPython.path, arg
 
 export async function pyTool(name: string): Promise<string | null> {
   if (currentPython) {
-    const p = P.join(scriptsDir(currentPython.path), name + ".exe");
+    const p = P.join(scriptsDir(currentPython.path), name + EXE);
     if (await host.exists(p)) return p;
   }
   return host.which(name);
@@ -151,7 +170,7 @@ export async function pyTool(name: string): Promise<string | null> {
 export async function goTool(name: string): Promise<string | null> {
   const g = await findGo();
   if (g) {
-    const p = P.join(g.gopath, "bin", name + ".exe");
+    const p = P.join(g.gopath, "bin", name + EXE);
     if (await host.exists(p)) return p;
   }
   return host.which(name);
@@ -165,6 +184,17 @@ async function goToolVersion(name: string, args: string[]): Promise<string | nul
 }
 
 const goInstall = (pkg: string) => ({ program: "go", args: ["install", pkg] });
+
+/** First line of `<bin> <args>` when the binary exists (null otherwise). */
+async function binVersion(name: string, args: string[]): Promise<string | null> {
+  const p = await host.which(name);
+  if (!p) return null;
+  const r = await host.capture(p, args, "", undefined, 20).catch(() => null);
+  return r ? (r.stdout + r.stderr).trim().split(/\r?\n/)[0].slice(0, 80) || "instalado" : "instalado";
+}
+
+const npmInstall = (pkg: string) => ({ program: IS_WIN ? "npm.cmd" : "npm", args: ["install", "-g", pkg] });
+const brewOrWinget = (brew: string[], winget: string) => (IS_WIN ? { program: "winget", args: ["install", "--id", winget, "-e", "--accept-source-agreements", "--accept-package-agreements"] } : { program: "brew", args: ["install", ...brew] });
 
 export const PLUGINS: LangPlugin[] = [
   {
@@ -188,6 +218,19 @@ export const PLUGINS: LangPlugin[] = [
       { id: "gopls", name: "gopls", purpose: "Servidor de linguagem oficial do Go (inclui gofmt, goimports e análises)", check: () => goToolVersion("gopls", ["version"]), install: () => goInstall("golang.org/x/tools/gopls@latest") },
       { id: "dlv", name: "Delve", purpose: "Depurador do Go", check: () => goToolVersion("dlv", ["version"]), install: () => goInstall("github.com/go-delve/delve/cmd/dlv@latest") },
       { id: "staticcheck", name: "staticcheck", purpose: "Análise estática avançada (Inspect Code)", check: () => goToolVersion("staticcheck", ["-version"]), install: () => goInstall("honnef.co/go/tools/cmd/staticcheck@latest") },
+    ],
+  },
+  {
+    id: "infra",
+    name: "Infraestrutura (IaC)",
+    icon: "terraform",
+    description: "Terraform, Dockerfile, Docker Compose e Kubernetes: autocomplete, validação por schema, documentação ao passar o mouse, formatação e ações (plan/apply, compose up/down, kubectl apply/diff).",
+    components: [
+      { id: "terraform", name: "Terraform CLI", purpose: "init, plan, apply, fmt e validate", check: () => binVersion("terraform", ["version"]), install: () => brewOrWinget(["hashicorp/tap/terraform"], "Hashicorp.Terraform") },
+      { id: "terraform-ls", name: "terraform-ls", purpose: "Servidor de linguagem oficial da HashiCorp para .tf", check: () => binVersion("terraform-ls", ["version"]), install: () => (IS_WIN ? goInstall("github.com/hashicorp/terraform-ls@latest") : { program: "brew", args: ["install", "hashicorp/tap/terraform-ls"] }) },
+      { id: "docker-langserver", name: "Dockerfile LS", purpose: "Autocomplete e validação de Dockerfile (precisa do Node.js)", check: () => host.which("docker-langserver").then((p) => (p ? "instalado" : null)), install: () => npmInstall("dockerfile-language-server-nodejs") },
+      { id: "yaml-language-server", name: "YAML LS", purpose: "Schemas do Docker Compose e do Kubernetes (precisa do Node.js)", check: () => host.which("yaml-language-server").then((p) => (p ? "instalado" : null)), install: () => npmInstall("yaml-language-server") },
+      { id: "kubectl", name: "kubectl", purpose: "apply, diff e get dos manifestos", check: () => binVersion("kubectl", ["version", "--client"]), install: () => brewOrWinget(["kubectl"], "Kubernetes.kubectl") },
     ],
   },
 ];

@@ -2,7 +2,8 @@
 import { h } from "../util";
 import { icon, fileIconName } from "../icons";
 import { confirmDialog, contextMenu, modal, button, toast, type MenuItem } from "../ui";
-import { host, P, type Entry } from "./host";
+import { host, P, REVEAL_LABEL, type Entry } from "./host";
+import { infraActions, infraKind, INFRA_ICON, INFRA_LABEL, INFRA_TEMPLATES, type InfraTemplate } from "./infra";
 import type { Workbench } from "./workbench";
 
 interface Node {
@@ -147,7 +148,15 @@ export class ProjectView {
         e.preventDefault();
         e.stopPropagation();
         this.select(n);
-        contextMenu(e.clientX, e.clientY, this.menu(n));
+        const x = e.clientX;
+        const y = e.clientY;
+        if (!n.dir && /\.ya?ml$/i.test(n.name) && !this.infraText.has(n.path.toLowerCase()))
+          host
+            .read(n.path)
+            .then((t) => this.infraText.set(n.path.toLowerCase(), t.text.slice(0, 4000)))
+            .catch(() => {})
+            .finally(() => contextMenu(x, y, this.menu(n)));
+        else contextMenu(x, y, this.menu(n));
       });
       row.addEventListener("dragstart", (e) => e.dataTransfer?.setData("text/rits-path", n.path));
       row.addEventListener("dragover", (e) => {
@@ -323,6 +332,8 @@ export class ProjectView {
           { separator: true },
           { label: "Arquivo Markdown", icon: "fileTypes/markdown", action: () => this.newEntry(dir, "md") },
           { label: ".gitignore", icon: "fileTypes/gitignore", action: () => this.createFile(P.join(dir, ".gitignore"), defaultGitignore()) },
+          { separator: true },
+          ...INFRA_TEMPLATES.map((t) => ({ label: t.label, icon: t.icon, action: () => this.createInfra(t, dir) })),
         ],
       },
       { separator: true },
@@ -336,6 +347,8 @@ export class ProjectView {
       { label: "Excluir…", icon: "general/delete", shortcut: "Delete", disabled: n === this.root, action: () => this.delete(n) },
       { separator: true },
     ];
+    const ik = n.dir ? null : infraKind(n.path, /\.ya?ml$/i.test(n.name) ? this.infraText.get(n.path.toLowerCase()) : undefined);
+    if (ik) items.push({ label: INFRA_LABEL[ik], icon: INFRA_ICON[ik], submenu: infraActions(this.wb, n.path, ik) }, { separator: true });
     if (target) {
       items.push(
         { label: `Executar ${target.label}`, icon: "run/run", shortcut: "Ctrl+Shift+F10", action: () => this.wb.runner.runTarget(target, false) },
@@ -348,7 +361,7 @@ export class ProjectView {
       if (hasTests) items.push({ label: "Executar testes aqui", icon: "run/testPassed", action: () => this.wb.runner.runTestsIn(n.path) }, { separator: true });
     }
     items.push(
-      { label: "Abrir no Explorer", icon: "general/open", action: () => host.reveal(n.path) },
+      { label: REVEAL_LABEL, icon: "general/open", action: () => host.reveal(n.path) },
       { label: "Abrir no Terminal", icon: "toolwindows/terminal", action: () => this.wb.terminals.newTab(dir) },
       { separator: true },
       {
@@ -367,6 +380,21 @@ export class ProjectView {
       { label: "Recarregar do disco", icon: "general/refresh", action: () => this.refresh() },
     );
     return items;
+  }
+
+  /** First lines of YAML files, read when the context menu opens, to recognize Kubernetes manifests. */
+  private infraText = new Map<string, string>();
+
+  private async createInfra(t: InfraTemplate, dir: string) {
+    const files = t.files(dir);
+    for (const f of files) {
+      if (await host.exists(f.path)) {
+        toast(`${P.base(f.path)} já existe — não foi sobrescrito.`, "info");
+        continue;
+      }
+      if (!(await host.exists(P.dir(f.path)))) await host.create(P.dir(f.path), true).catch(() => {});
+      await this.createFile(f.path, f.content);
+    }
   }
 
   newFileAt(dir: string | null) {

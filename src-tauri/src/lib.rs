@@ -5,7 +5,7 @@ pub mod fsx;
 pub mod procs;
 mod ide;
 
-use db::{ColumnInfo, CompletionTable, DbObject, IndexInfo, QueryResult, ServerInfo, Session, Sessions};
+use db::{ColumnInfo, CompletionTable, DbObject, DiagramInfo, IndexInfo, QueryResult, ServerInfo, Session, Sessions};
 use store::ConnConfig;
 use tauri::{AppHandle, Manager, State};
 
@@ -31,6 +31,7 @@ fn list_connections(app: AppHandle) -> Result<Vec<ConnConfig>, String> {
 
 #[tauri::command]
 async fn save_connection(app: AppHandle, st: State<'_, Sessions>, cfg: ConnConfig) -> Result<(), String> {
+    db::ext::ensure_driver(&cfg.kind).await?;
     let mut all = store::load(&app)?;
     match all.iter_mut().find(|c| c.id == cfg.id) {
         Some(c) => *c = cfg.clone(),
@@ -52,20 +53,50 @@ async fn delete_connection(app: AppHandle, st: State<'_, Sessions>, id: String) 
 
 #[tauri::command]
 async fn test_connection(cfg: ConnConfig) -> Result<ServerInfo, String> {
-    let s = Session::open(&cfg, &cfg.default_db()).await?;
-    match &s {
+    // Downloads the driver on first use (SQL Server, Oracle, MongoDB...), like DataGrip does.
+    db::ext::ensure_driver(&cfg.kind).await?;
+    let mut s = Session::open(&cfg, &cfg.default_db()).await?;
+    match &mut s {
         Session::Pg(c) => c.server_info().await,
         Session::My(c) => c.server_info().await,
+        Session::Ext(c) => c.server_info().await,
+    }
+}
+
+#[tauri::command]
+fn driver_status(kind: store::DbKind) -> db::ext::DriverStatus {
+    db::ext::status(&kind)
+}
+
+#[tauri::command]
+async fn install_driver(kind: store::DbKind) -> Result<(), String> {
+    db::ext::ensure_driver(&kind).await
+}
+
+#[tauri::command]
+fn remove_driver(kind: store::DbKind) -> Result<(), String> {
+    db::ext::remove_driver(&kind)
+}
+
+#[tauri::command]
+async fn diagram_info(app: AppHandle, st: State<'_, Sessions>, conn_id: String, db: String, schema: String) -> Result<DiagramInfo, String> {
+    let s = session(&app, &st, &conn_id, &db, "diagram").await?;
+    let mut s = s.lock().await;
+    match &mut *s {
+        Session::Pg(c) => c.diagram(&schema).await,
+        Session::My(c) => c.diagram(&schema).await,
+        Session::Ext(c) => c.diagram(&schema).await,
     }
 }
 
 #[tauri::command]
 async fn connect(app: AppHandle, st: State<'_, Sessions>, conn_id: String) -> Result<ServerInfo, String> {
     let s = session(&app, &st, &conn_id, "", META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.server_info().await,
         Session::My(c) => c.server_info().await,
+        Session::Ext(c) => c.server_info().await,
     }
 }
 
@@ -80,20 +111,22 @@ async fn disconnect(st: State<'_, Sessions>, conn_id: String) -> Result<(), Stri
 #[tauri::command]
 async fn list_databases(app: AppHandle, st: State<'_, Sessions>, conn_id: String) -> Result<Vec<String>, String> {
     let s = session(&app, &st, &conn_id, "", META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.databases().await,
         Session::My(c) => c.databases().await,
+        Session::Ext(c) => c.databases().await,
     }
 }
 
 #[tauri::command]
 async fn list_schemas(app: AppHandle, st: State<'_, Sessions>, conn_id: String, db: String) -> Result<Vec<String>, String> {
     let s = session(&app, &st, &conn_id, &db, META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.schemas().await,
         Session::My(_) => Ok(vec![db]),
+        Session::Ext(c) => c.schemas().await,
     }
 }
 
@@ -106,10 +139,11 @@ async fn list_objects(
     schema: String,
 ) -> Result<Vec<DbObject>, String> {
     let s = session(&app, &st, &conn_id, &db, META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.objects(&schema).await,
         Session::My(c) => c.objects(&schema).await,
+        Session::Ext(c) => c.objects(&schema).await,
     }
 }
 
@@ -123,10 +157,11 @@ async fn list_columns(
     table: String,
 ) -> Result<Vec<ColumnInfo>, String> {
     let s = session(&app, &st, &conn_id, &db, META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.columns(&schema, &table).await,
         Session::My(c) => c.columns(&schema, &table).await,
+        Session::Ext(c) => c.columns(&schema, &table).await,
     }
 }
 
@@ -140,10 +175,11 @@ async fn list_indexes(
     table: String,
 ) -> Result<Vec<IndexInfo>, String> {
     let s = session(&app, &st, &conn_id, &db, META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.indexes(&schema, &table).await,
         Session::My(c) => c.indexes(&schema, &table).await,
+        Session::Ext(c) => c.indexes(&schema, &table).await,
     }
 }
 
@@ -158,10 +194,11 @@ async fn get_ddl(
     kind: String,
 ) -> Result<String, String> {
     let s = session(&app, &st, &conn_id, &db, META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.ddl(&schema, &name, &kind).await,
         Session::My(c) => c.ddl(&schema, &name, &kind).await,
+        Session::Ext(c) => c.ddl(&schema, &name, &kind).await,
     }
 }
 
@@ -173,10 +210,11 @@ async fn completion_info(
     db: String,
 ) -> Result<Vec<CompletionTable>, String> {
     let s = session(&app, &st, &conn_id, &db, META).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.completion().await,
         Session::My(c) => c.completion(&db).await,
+        Session::Ext(c) => c.completion(&db).await,
     }
 }
 
@@ -192,10 +230,11 @@ async fn execute(
     sql: String,
 ) -> Result<Vec<QueryResult>, String> {
     let s = session(&app, &st, &conn_id, &db, &channel).await?;
-    let s = s.lock().await;
-    match &*s {
+    let mut s = s.lock().await;
+    match &mut *s {
         Session::Pg(c) => c.execute(&sql).await,
         Session::My(c) => c.execute(&sql).await,
+        Session::Ext(c) => c.execute(&sql).await,
     }
 }
 
@@ -248,10 +287,15 @@ fn save_doc(app: AppHandle, key: String, value: serde_json::Value) -> Result<(),
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    procs::adopt_login_shell_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             store::migrate_legacy(app.handle());
+            if let Ok(dir) = app.path().app_config_dir() {
+                db::ext::init(app.handle().clone(), dir);
+            }
             Ok(())
         })
         .manage(Sessions::default())
@@ -263,6 +307,10 @@ pub fn run() {
             save_connection,
             delete_connection,
             test_connection,
+            driver_status,
+            install_driver,
+            remove_driver,
+            diagram_info,
             connect,
             disconnect,
             list_databases,

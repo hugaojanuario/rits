@@ -14,7 +14,8 @@ const C = (body: string, size = 16) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const BLUE = "#548AF7";
 const custom: Record<string, string> = {
-  logo: `<svg viewBox="0 0 32 32" width="20" height="20"><defs><linearGradient id="bgl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2fd4a4"/><stop offset="1" stop-color="#3b7bff"/></linearGradient></defs><rect x="1" y="1" width="30" height="30" rx="8" fill="url(#bgl)"/><ellipse cx="16" cy="10" rx="8" ry="3.2" fill="none" stroke="#fff" stroke-width="2"/><path d="M8 10v11c0 1.8 3.6 3.2 8 3.2s8-1.4 8-3.2V10" fill="none" stroke="#fff" stroke-width="2"/><path d="M12.5 17.5h7M16 14v7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>`,
+  // Rits mark (assets/logo.svg): an "R" drawn as a pipeline graph; the green node is the output.
+  logo: `<svg viewBox="0 0 32 32" width="20" height="20"><rect width="32" height="32" rx="8" fill="#111214"/><g transform="translate(16 16) scale(0.04) translate(-485.5 -411.5)"><path d="M330 638V185H485a113.5 113.5 0 0 1 0 227H330M485 412L641 638" fill="none" stroke="#F0F0F0" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><g fill="#F0F0F0"><circle cx="330" cy="185" r="58"/><circle cx="485" cy="412" r="58"/><circle cx="330" cy="638" r="58"/></g><circle cx="641" cy="638" r="58" fill="#6DB58F"/></g></svg>`,
   branch: C(`<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 2.5-2 3.2-4.5 3.6-1.2.2-2.2.6-2.5 1.4"/>`),
   database: C(`<ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/>`),
   databaseTw: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.1"><ellipse cx="10" cy="4.5" rx="6.5" ry="2.5"/><path d="M3.5 4.5v11c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-11M3.5 10c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg>`,
@@ -59,6 +60,23 @@ const custom: Record<string, string> = {
   dot: `<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>`,
   plugins: C(`<path d="M6 2.5h4v2a1.5 1.5 0 0 0 3 0V4h0.5v9.5h-11V4H3v.5a1.5 1.5 0 0 0 3 0z"/>`),
   bug: C(`<path d="M5.5 5.5h5v4a2.5 2.5 0 0 1-5 0z"/><path d="M6 5.5a2 2 0 0 1 4 0M2.5 7.5h3M10.5 7.5h3M3 11.5l2.6-1M13 11.5l-2.6-1M4 3.5l1.6 1.6M12 3.5l-1.6 1.6"/>`),
+  // Docker whale (container stack on the back), in the stroke style of the other icons.
+  dockerTw: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"><path d="M1.8 10.2h14.6c.9-.1 1.6-.6 2-1.4.5.3 1 .2 1.3-.1-.3-.4-.8-.6-1.4-.5-.2-.8-.7-1.3-1.3-1.6-.4.7-.4 1.5-.1 2.1M1.8 10.2c.3 3.6 3.4 6 7.4 6 4.2 0 7.3-2.4 8.2-6"/><path d="M3.8 7.8h2.6v2.4H3.8zM6.4 7.8H9v2.4H6.4zM9 7.8h2.6v2.4H9zM6.4 5.4H9v2.4H6.4zM9 5.4h2.6v2.4H9zM9 3h2.6v2.4H9zM11.6 7.8h2.6v2.4h-2.6z"/><circle cx="6" cy="13" r=".5" fill="currentColor" stroke="none"/></svg>`,
+  docker: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-linejoin="round"><path d="M.8 8.2h12.3c.8-.1 1.4-.5 1.7-1.2.4.2.8.2 1.1-.1-.3-.3-.7-.5-1.2-.4-.1-.7-.6-1.1-1.1-1.3-.3.6-.3 1.2-.1 1.7M.8 8.2c.2 3 2.8 5 6.2 5 3.5 0 6.1-2 6.9-5" fill="#2496ED" fill-opacity=".18" stroke="#2496ED"/><g fill="#2496ED"><rect x="2.4" y="6.2" width="1.9" height="1.7" rx=".2"/><rect x="4.6" y="6.2" width="1.9" height="1.7" rx=".2"/><rect x="6.8" y="6.2" width="1.9" height="1.7" rx=".2"/><rect x="9" y="6.2" width="1.9" height="1.7" rx=".2"/><rect x="4.6" y="4.2" width="1.9" height="1.7" rx=".2"/><rect x="6.8" y="4.2" width="1.9" height="1.7" rx=".2"/><rect x="6.8" y="2.2" width="1.9" height="1.7" rx=".2"/></g><circle cx="4.2" cy="10.4" r=".55" fill="#2496ED"/></svg>`,
+  container: C(`<rect x="1.5" y="5" width="13" height="7.5" rx="1.5"/><path d="M4.5 5v7.5M8 5v7.5M11.5 5v7.5"/>`),
+  containerStack: C(`<rect x="1.5" y="8.5" width="6" height="5" rx="1"/><rect x="8.5" y="8.5" width="6" height="5" rx="1"/><rect x="5" y="2.5" width="6" height="5" rx="1"/>`),
+  // databases with on-demand drivers (simplified marks, own drawings)
+  dbSqlserver: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#D9534F" stroke-linejoin="round"><path d="M3 13.5c3-1 7-1.2 10.5.3M4.5 11c.8-4 3-7.5 6.5-9-1 2.6-1 5.6.5 8.6"/><path d="M5.5 7.5c2-.6 4.4-.5 6.5.3"/></svg>`,
+  dbOracle: `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="4.5" width="13" height="7" rx="3.5" fill="none" stroke="#E0533D" stroke-width="1.8"/></svg>`,
+  dbFirebird: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#F08A24" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14.5c-3 0-5-2-5-4.6 0-2.4 1.6-3.6 2.4-5.4.6 1.3.4 2.4 1.4 3 .3-2.3 1.6-4.2 3.7-5.5-.4 2 .3 3.3 1.3 4.6.8 1 1.2 2.1 1.2 3.3 0 2.6-2 4.6-5 4.6z" fill="#F08A24" fill-opacity=".15"/><path d="M8 14.5c-1.3 0-2.2-.9-2.2-2.1 0-1.2 1-1.8 1.5-2.9.5 1 1.7 1.6 2 2.6.3 1.3-.4 2.4-1.3 2.4z"/></svg>`,
+  dbSqlite: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3D8FD1" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5c1.5-4.5 4.5-9 10.5-11.5-1 3.6-3.6 8.8-8.4 10.4"/><path d="M5.6 9.8l3.2-.4M7.4 7.2l2.8-.6" opacity=".8"/></svg>`,
+  dbDuckdb: `<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="#F6D33C" fill-opacity=".2" stroke="#E5B92A"/><circle cx="6.6" cy="8" r="2.4" fill="none" stroke="#E5B92A"/><path d="M9.2 7.4h3.4l-.6 1.4H9.2z" fill="#F08A24"/></svg>`,
+  dbClickhouse: `<svg width="16" height="16" viewBox="0 0 16 16" fill="#E8C33A"><rect x="2" y="2.5" width="1.6" height="11" rx=".4"/><rect x="4.8" y="2.5" width="1.6" height="11" rx=".4"/><rect x="7.6" y="2.5" width="1.6" height="11" rx=".4"/><rect x="10.4" y="2.5" width="1.6" height="11" rx=".4"/><rect x="13.2" y="6.6" width="1.6" height="2.8" rx=".4"/></svg>`,
+  dbMongo: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3FA45B" stroke-linejoin="round"><path d="M8 1.5c2.6 2.6 3.9 5 3.6 7.5-.3 2.4-1.7 3.8-3.6 4.6-1.9-.8-3.3-2.2-3.6-4.6C4.1 6.5 5.4 4.1 8 1.5z" fill="#3FA45B" fill-opacity=".15"/><path d="M8 4.5v10" stroke-linecap="round"/></svg>`,
+  terraform: `<svg width="16" height="16" viewBox="0 0 16 16" fill="#8A6CE8"><path d="M5.6 2.6l4.2 2.4v4.8L5.6 7.4z"/><path d="M10.4 5v4.8l4.2-2.4V2.6z" opacity=".7"/><path d="M1.2.2l4 2.3v4.8l-4-2.3zM5.6 8.2l4.2 2.4v4.8l-4.2-2.4z"/></svg>`,
+  k8s: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-linecap="round"><path d="M8 1.2l5.6 2.7 1.4 6-3.9 4.8H4.9L1 9.9l1.4-6z" fill="#3970E4" fill-opacity=".18" stroke="#3970E4" stroke-linejoin="round"/><circle cx="8" cy="8.2" r="2.1" stroke="#3970E4"/><path d="M8 3.6v2.5M8 10.3v2.4M3.7 6.6l2.3 1M10 8.8l2.3 1M4.4 11.4l2-1.8M9.6 6.8l2-1.8" stroke="#3970E4"/></svg>`,
+  diagram: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-linejoin="round"><rect x="1.5" y="2" width="5.5" height="5" rx="1.2" stroke="currentColor"/><rect x="9" y="9" width="5.5" height="5" rx="1.2" stroke="currentColor"/><path d="M1.5 4h5.5M9 11h5.5" stroke="${BLUE}"/><path d="M7 4.5c2.5 0 1.5 6.5 2 6.5" stroke="${BLUE}" stroke-linecap="round"/></svg>`,
+  dgLink: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="${BLUE}" stroke-linecap="round"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/></svg>`,
   pkg: C(`<path d="M2.5 5L8 2.5 13.5 5v6L8 13.5 2.5 11z"/><path d="M2.5 5L8 7.5 13.5 5M8 7.5v6"/>`),
 };
 
@@ -159,6 +177,7 @@ const byExt: Record<string, string> = {
   html: "fileTypes/html", htm: "fileTypes/html", css: "fileTypes/css", scss: "fileTypes/css", js: "fileTypes/javaScript", mjs: "fileTypes/javaScript",
   cjs: "fileTypes/javaScript", jsx: "fileTypes/javaScript", ts: "fileTypes/typeScript", tsx: "fileTypes/typeScript",
   xml: "fileTypes/xml", sh: "fileTypes/shell", bash: "fileTypes/shell", ps1: "fileTypes/shell", bat: "fileTypes/microsoftWindows", cmd: "fileTypes/microsoftWindows",
+  tf: "terraform", tfvars: "terraform", hcl: "terraform", nomad: "terraform",
   sql: "fileTypes/sql", csv: "fileTypes/csv", tsv: "fileTypes/csv", ini: "fileTypes/config", cfg: "fileTypes/config", conf: "fileTypes/config",
   env: "fileTypes/config", properties: "fileTypes/properties", png: "fileTypes/image", jpg: "fileTypes/image", jpeg: "fileTypes/image", gif: "fileTypes/image",
   svg: "fileTypes/image", ico: "fileTypes/image", webp: "fileTypes/image", zip: "fileTypes/archive", gz: "fileTypes/archive", tar: "fileTypes/archive",
@@ -166,8 +185,8 @@ const byExt: Record<string, string> = {
   exe: "fileTypes/binaryData", dll: "fileTypes/binaryData", pyc: "fileTypes/binaryData", lock: "fileTypes/config",
 };
 const byName: Record<string, string> = {
-  ".gitignore": "fileTypes/gitignore", ".dockerignore": "fileTypes/ignored", dockerfile: "fileTypes/docker", "docker-compose.yml": "fileTypes/docker",
-  "compose.yaml": "fileTypes/docker", ".editorconfig": "fileTypes/editorConfig", makefile: "fileTypes/config", "requirements.txt": "python/pythonPackages",
+  ".gitignore": "fileTypes/gitignore", ".dockerignore": "fileTypes/ignored", dockerfile: "docker", containerfile: "docker",
+  "docker-compose.yml": "containerStack", "docker-compose.yaml": "containerStack", "compose.yaml": "containerStack", "compose.yml": "containerStack", ".editorconfig": "fileTypes/editorConfig", makefile: "fileTypes/config", "requirements.txt": "python/pythonPackages",
   "pyproject.toml": "fileTypes/toml", "go.mod": "goMod", "go.sum": "goMod", license: "fileTypes/text", ".env": "fileTypes/config",
 };
 

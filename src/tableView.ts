@@ -8,6 +8,7 @@ import { store } from "./state";
 import type { Tab } from "./tabs";
 import { button, confirmDialog, modal, toast } from "./ui";
 import { formatDuration, h, qualified, quoteIdent, quoteLiteral } from "./util";
+import { dialect } from "./dialects";
 
 export interface ObjectRef {
   connId: string;
@@ -21,8 +22,10 @@ const CHANNEL = "data";
 
 export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole: (sql: string) => void): Tab {
   const k = conn.kind;
+  const d = dialect(k);
   const fq = qualified(k, ref.schema, ref.name);
-  const editable = ref.kind === "table" && !conn.readOnly;
+  // MongoDB documents are browsed read-only (edit them with mongosh commands in the console).
+  const editable = ref.kind === "table" && !conn.readOnly && d.sql;
   let columns: ColumnInfo[] = [];
   let pageSize = 200;
   let page = 0;
@@ -147,10 +150,15 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
 
   function buildSelect(limit = true) {
     const where = whereI.value.trim();
+    if (d.family === "mongo") {
+      // filter = JSON filter, order = JSON sort, e.g. { "criado": -1 }
+      const sort = orderBy.trim().startsWith("{") ? `.sort(${orderBy})` : "";
+      return `db.getCollection(${JSON.stringify(ref.name)}).find(${where || "{}"})${sort}${limit ? `.skip(${page * pageSize}).limit(${pageSize})` : ".limit(50000)"}`;
+    }
     let s = `SELECT * FROM ${fq}`;
     if (where) s += ` WHERE ${where}`;
     if (orderBy) s += ` ORDER BY ${orderBy}`;
-    if (limit) s += ` LIMIT ${pageSize} OFFSET ${page * pageSize}`;
+    if (limit) s = d.page(s, pageSize, page * pageSize, !!orderBy);
     return s;
   }
 
@@ -197,7 +205,8 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
   async function countRows() {
     try {
       const where = whereI.value.trim();
-      const [r] = await api.execute(conn.id, ref.db, CHANNEL, `SELECT COUNT(*) FROM ${fq}${where ? ` WHERE ${where}` : ""}`);
+      const q = d.family === "mongo" ? `db.getCollection(${JSON.stringify(ref.name)}).countDocuments(${where || "{}"})` : `SELECT COUNT(*) FROM ${fq}${where ? ` WHERE ${where}` : ""}`;
+      const [r] = await api.execute(conn.id, ref.db, CHANNEL, q);
       total = Number(r.rows[0][0]);
       renderPageInfo();
     } catch (e) {
@@ -229,7 +238,8 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
       })
       .join(" AND ");
     if (pks.length) return cond;
-    return k === "postgres" ? `ctid = (SELECT ctid FROM ${fq} WHERE ${cond} LIMIT 1)` : `${cond} LIMIT 1`;
+    if (d.family === "pg") return `ctid = (SELECT ctid FROM ${fq} WHERE ${cond} LIMIT 1)`;
+    return d.family === "mysql" ? `${cond} LIMIT 1` : cond;
   }
 
   function buildDml(): string[] {
@@ -244,7 +254,7 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
       const row = grid.rows[ri];
       const idx = row.map((v, i) => (v === null ? -1 : i)).filter((i) => i >= 0);
       if (!idx.length) {
-        out.push(k === "postgres" ? `INSERT INTO ${fq} DEFAULT VALUES` : `INSERT INTO ${fq} () VALUES ()`);
+        out.push(d.family === "mysql" ? `INSERT INTO ${fq} () VALUES ()` : `INSERT INTO ${fq} DEFAULT VALUES`);
         continue;
       }
       out.push(
@@ -281,18 +291,19 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
       const ok = await confirmDialog("Tabela sem chave primária", "Esta tabela não tem chave primária. As linhas serão localizadas comparando todas as colunas. Continuar?", "Continuar");
       if (!ok) return;
     }
-    const begin = k === "postgres" ? "BEGIN" : "START TRANSACTION";
+    // Drivers without explicit transactions here (SQL Server, Oracle...) run in auto-commit.
+    const begin = d.begin;
     try {
-      await api.execute(conn.id, ref.db, CHANNEL, begin);
+      if (begin) await api.execute(conn.id, ref.db, CHANNEL, begin);
       for (const s of stmts) await api.execute(conn.id, ref.db, CHANNEL, s);
-      await api.execute(conn.id, ref.db, CHANNEL, "COMMIT");
+      if (begin) await api.execute(conn.id, ref.db, CHANNEL, "COMMIT");
       for (const s of stmts) store.addLog({ time: Date.now(), connName: conn.name, db: ref.db, sql: s, ok: true, message: "ok", elapsedMs: 0 });
       toast(`${stmts.length} alteração(ões) gravada(s)`, "ok");
       grid.changes = { updated: new Map(), inserted: new Set(), deleted: new Set() };
       updateDirty();
       load(true);
     } catch (e) {
-      await api.execute(conn.id, ref.db, CHANNEL, "ROLLBACK").catch(() => {});
+      if (begin) await api.execute(conn.id, ref.db, CHANNEL, "ROLLBACK").catch(() => {});
       store.addLog({ time: Date.now(), connName: conn.name, db: ref.db, sql: stmts.join(";\n"), ok: false, message: String(e), elapsedMs: 0 });
       toast(`Erro ao gravar — nada foi alterado.\n${e}`, "error", 10000);
     }

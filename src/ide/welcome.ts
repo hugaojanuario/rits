@@ -4,7 +4,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { h } from "../util";
 import { icon } from "../icons";
 import { button, contextMenu, modal, toast } from "../ui";
-import { host, P } from "./host";
+import { host, INSTALL, P, REVEAL_LABEL } from "./host";
 import { projectBadge, recentProjects, removeRecent, type RecentProject } from "./project";
 import { findGo, findInterpreters, runBackground } from "./sdk";
 import { cloneRepo } from "./git";
@@ -146,7 +146,7 @@ function recentRow(r: RecentProject, home: string, refresh: () => void) {
   };
   more.onclick = (e) =>
     contextMenu(e.clientX, e.clientY, [
-      { label: "Abrir no Explorer", action: () => host.reveal(r.path) },
+      { label: REVEAL_LABEL, action: () => host.reveal(r.path) },
       { label: "Copiar caminho", action: () => navigator.clipboard.writeText(P.win(r.path)) },
       { label: "Remover da lista", icon: "general/remove", action: () => removeRecent(r.path).then(refresh) },
     ]);
@@ -185,7 +185,7 @@ export async function openNewProjectDialog(wb: Workbench | null) {
     interpSel.replaceChildren(...base.map((p) => h("option", { value: p.path }, `${p.label} — ${P.win(p.path)}`)));
     if (!base.length) interpSel.append(h("option", { value: "" }, "Nenhum Python encontrado"));
   });
-  findGo().then((g) => (goInfo.textContent = g ? `Go ${g.version} — ${P.win(g.goroot)}` : "Go SDK não encontrado (instale com winget install GoLang.Go)"));
+  findGo().then((g) => (goInfo.textContent = g ? `Go ${g.version} — ${P.win(g.goroot)}` : `Go SDK não encontrado (instale com ${INSTALL.go})`));
   const drawNav = () =>
     nav.replaceChildren(
       ...([["python", "Python puro", "python/python"], ["go", "Go", "goFile"], ["empty", "Projeto vazio", "nodes/folder"]] as const).map(([k, label, ic]) =>
@@ -291,7 +291,7 @@ export async function openCloneDialog(wb: Workbench | null) {
     const url = urlI.value.trim();
     const dest = P.norm(dirI.value.trim());
     if (!url || !dest) return;
-    if (!(await host.which("git"))) return toast("Git não encontrado. Instale com: winget install Git.Git", "error", 8000);
+    if (!(await host.which("git"))) return toast(`Git não encontrado. Instale com: ${INSTALL.git}`, "error", 8000);
     if (await host.exists(dest)) return toast("O diretório de destino já existe.", "error");
     await host.create(P.dir(dest), true).catch(() => {});
     cloneBtn.disabled = true;

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-export type DbKind = "postgres" | "mysql";
+export type DbKind = "postgres" | "mysql" | "sqlserver" | "oracle" | "firebird" | "sqlite" | "duckdb" | "clickhouse" | "mongodb";
 
 export interface ConnConfig {
   id: string;
@@ -16,6 +16,34 @@ export interface ConnConfig {
   toolsDir: string;
   color: string;
   readOnly: boolean;
+  /** Project folder the connection belongs to; "" = shown in every project. */
+  project: string;
+}
+
+export interface DriverStatus {
+  native: boolean;
+  installed: boolean;
+  packages: string[];
+}
+
+export interface ForeignKey {
+  name: string;
+  table: string;
+  columns: string[];
+  refSchema: string;
+  refTable: string;
+  refColumns: string[];
+}
+
+export interface DiagramTable {
+  name: string;
+  kind: string;
+  columns: ColumnInfo[];
+}
+
+export interface DiagramInfo {
+  tables: DiagramTable[];
+  fks: ForeignKey[];
 }
 
 export interface QueryResult {
@@ -119,6 +147,11 @@ export const api = {
     invoke<ColumnInfo[]>("list_columns", { connId, db, schema, table }),
   indexes: (connId: string, db: string, schema: string, table: string) =>
     invoke<IndexInfo[]>("list_indexes", { connId, db, schema, table }),
+  driverStatus: (kind: DbKind) => invoke<DriverStatus>("driver_status", { kind }),
+  installDriver: (kind: DbKind) => invoke<void>("install_driver", { kind }),
+  removeDriver: (kind: DbKind) => invoke<void>("remove_driver", { kind }),
+  diagram: (connId: string, db: string, schema: string) => invoke<DiagramInfo>("diagram_info", { connId, db, schema }),
+  onDriverProgress: (cb: (p: { kind: DbKind; line: string; done: boolean }) => void) => listen<{ kind: DbKind; line: string; done: boolean }>("driver-progress", (e) => cb(e.payload)),
   ddl: (connId: string, db: string, schema: string, name: string, kind: string) =>
     invoke<string>("get_ddl", { connId, db, schema, name, kind }),
   completion: (connId: string, db: string) => invoke<CompletionTable[]>("completion_info", { connId, db }),

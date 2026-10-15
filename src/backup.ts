@@ -5,6 +5,7 @@ import { icon } from "./icons";
 import { store } from "./state";
 import { button, confirmDialog, modal, toast } from "./ui";
 import { formatDuration, h, timestamp, uid } from "./util";
+import { INSTALL } from "./ide/host";
 
 // ---------------- task panel ----------------
 
@@ -126,8 +127,8 @@ function toolsBox(conn: ConnConfig, needed: string[]) {
               "div.tool-hint",
               null,
               conn.kind === "postgres"
-                ? "Instale o PostgreSQL client (ex.: winget install PostgreSQL.PostgreSQL) ou informe a pasta \\bin nas propriedades da conexão."
-                : "Instale o MySQL Shell/Server ou MariaDB client (ex.: winget install Oracle.MySQL) ou informe a pasta \\bin nas propriedades da conexão.",
+                ? `Instale o PostgreSQL client (ex.: ${INSTALL.pg}) ou informe a pasta bin nas propriedades da conexão.`
+                : `Instale o MySQL Shell/Server ou MariaDB client (ex.: ${INSTALL.mysql}) ou informe a pasta bin nas propriedades da conexão.`,
             )
           : "",
       );

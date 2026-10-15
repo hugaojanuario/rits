@@ -18,6 +18,7 @@ fn cfg(kind: DbKind) -> ConnConfig {
         tools_dir: String::new(),
         color: String::new(),
         read_only: false,
+        project: String::new(),
     }
 }
 

@@ -9,6 +9,7 @@ import { store } from "./state";
 import type { Tab } from "./tabs";
 import { confirmDialog, dropdown, makeSplitter, toast } from "./ui";
 import { debounce, formatDuration, h, splitSql, uid } from "./util";
+import { dialect } from "./dialects";
 
 export interface ConsoleState {
   id: string;
@@ -197,7 +198,9 @@ export function createConsole(
       return;
     }
     if (mode === "explain") {
-      statements = [conn.kind === "postgres" ? `EXPLAIN (VERBOSE, COSTS) ${statements[0]}` : `EXPLAIN FORMAT=TREE ${statements[0]}`];
+      const ex = dialect(conn.kind).explain;
+      if (!ex) return toast(`EXPLAIN não está disponível para ${dialect(conn.kind).label} no console.`);
+      statements = [ex(statements[0])];
     }
     if (conn.readOnly === false && statements.some((s) => /^\s*(drop|truncate)\s/i.test(s)) && !manualTx) {
       const ok = await confirmDialog("Instrução destrutiva", `Executar ${statements.length > 1 ? "script com " : ""}DROP/TRUNCATE em "${conn.name}"?`, "Executar", true);
@@ -311,7 +314,7 @@ export function createConsole(
 
   // --- database / schema context ---
   const renderCtx = () => {
-    dbBtn.replaceChildren(icon(conn.kind === "postgres" ? "database" : "schema"), h("span", null, [state.db || "(padrão)", state.schema].filter(Boolean).join(" / ")), icon("chevronD"));
+    dbBtn.replaceChildren(icon(dialect(conn.kind).schemas ? "database" : "schema"), h("span", null, [state.db || "(padrão)", state.schema].filter(Boolean).join(" / ")), icon("chevronD"));
   };
   async function ctxMenu() {
     try {
@@ -319,7 +322,7 @@ export function createConsole(
       const dbs = await api.databases(conn.id);
       const items = await Promise.all(
         dbs.map(async (d) => {
-          if (conn.kind === "mysql") return { label: d, icon: d === state.db ? "check" : "schema", action: () => switchCtx(d, "") };
+          if (!dialect(conn.kind).schemas) return { label: d, icon: d === state.db ? "check" : "schema", action: () => switchCtx(d, "") };
           return {
             label: d,
             icon: d === state.db ? "check" : "database",

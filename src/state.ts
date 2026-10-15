@@ -19,8 +19,15 @@ export interface HistoryEntry {
   sql: string;
 }
 
+const normPath = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+
 class Store {
+  /** Connections visible in this window: global ones plus those of the open project. */
   connections: ConnConfig[] = [];
+  /** Every saved connection (other projects included). */
+  all: ConnConfig[] = [];
+  /** Folder of the project open in this window ("" on the welcome screen). */
+  projectRoot = "";
   connected = new Map<string, ServerInfo>();
   connecting = new Set<string>();
   log: LogEntry[] = [];
@@ -39,13 +46,19 @@ class Store {
   }
 
   async load() {
-    this.connections = await api.listConnections();
+    this.all = (await api.listConnections()).map((c) => ({ ...c, project: c.project ?? "" }));
+    const root = normPath(this.projectRoot);
+    this.connections = this.all.filter((c) => !c.project || (root && normPath(c.project) === root));
     this.history = (await api.loadDoc<HistoryEntry[]>("history")) ?? [];
     this.emit("connections");
   }
 
   conn(id: string) {
-    return this.connections.find((c) => c.id === id);
+    return this.all.find((c) => c.id === id);
+  }
+
+  setProject(root: string) {
+    this.projectRoot = root.replace(/\\/g, "/").replace(/\/+$/, "");
   }
 
   async save(cfg: ConnConfig) {

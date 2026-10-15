@@ -1,14 +1,15 @@
 // The IDE window: main toolbar, tool window stripes, islands (tool windows + editor), status bar.
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Effect, EffectState, getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { h, uid } from "../util";
 import { icon, twIcon } from "../icons";
 import { TabManager } from "../tabs";
 import { closeMenus, contextMenu, modal, button, popupList, toast, type MenuItem, type PopupItem } from "../ui";
-import { host, onFsChange, P, type EnvInfo } from "./host";
+import { host, IS_MAC, onFsChange, P, type EnvInfo } from "./host";
+import { displayShortcut, keymapId } from "./keymap";
 import { loadProjectSettings, projectBadge, recentProjects, saveProjectSettings, touchRecent, type ProjectSettings } from "./project";
-import { LspManager, type LspLang } from "./lsp";
+import { LspManager, LSP_LANG_LABEL, LSP_NAME, type LspLang } from "./lsp";
 import { onBgTasks, resolveInterpreter, setCurrentPython, findGo, type PyInterp } from "./sdk";
 import { Editors } from "./editors";
 import { ProjectView } from "./projectView";
@@ -19,11 +20,28 @@ import { Terminals } from "./terminal";
 import { Problems } from "./problems";
 import { Structure } from "./structure";
 import { DbTools } from "./dbtools";
+import { DockerTools, dockerEnabled } from "./docker";
 import { searchEverywhere, findInFiles, gotoLine, recentFiles, fileStructurePopup } from "./search";
 import { openSettings } from "./settings";
 import { openCloneDialog, openNewProjectDialog } from "./welcome";
 
 export type Anchor = "left" | "right" | "bottom";
+/** A place on the stripes: top of a side stripe, or the bottom group of a side stripe (bottom anchor). */
+type StripeZone = "left" | "right" | "bottom-left" | "bottom-right";
+interface Placement {
+  anchor: Anchor;
+  side?: "left" | "right";
+  order: number;
+}
+const LAYOUT_KEY = "toolLayout";
+
+function loadToolLayout(): Record<string, Placement> {
+  try {
+    return JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
 
 export interface ToolWindow {
   id: string;
@@ -37,6 +55,9 @@ export interface ToolWindow {
   actions?: () => HTMLElement[];
   onShow?: () => void;
   badge?: boolean;
+  /** Stripe of a bottom tool window (default left). */
+  side?: "left" | "right";
+  order?: number;
 }
 
 export class Workbench {
@@ -56,6 +77,7 @@ export class Workbench {
   problems!: Problems;
   structure!: Structure;
   db!: DbTools;
+  docker: DockerTools | null = null;
 
   private toolWindows = new Map<string, ToolWindow>();
   private visible: Partial<Record<Anchor, string>> = {};
@@ -63,6 +85,11 @@ export class Workbench {
   private splitters: Record<Anchor, HTMLElement>;
   private stripeLeft = h("div.stripe");
   private stripeRight = h("div.stripe");
+  private stripeZones: Record<StripeZone, { tw: ToolWindow; el: HTMLElement }[]> = { left: [], right: [], "bottom-left": [], "bottom-right": [] };
+  private suppressStripeClick = false;
+  private defaultPlacement = new Map<string, Placement>();
+  /** Last tool window shown on each side, for the "toggle sidebar/panel" shortcuts. */
+  private lastVisible: Partial<Record<Anchor, string>> = {};
   private editorIsland: HTMLElement;
   private toolbar = h("div.main-toolbar");
   private statusLeft = h("div.sb-crumbs");
@@ -86,12 +113,16 @@ export class Workbench {
         ["Barra de navegação", "Alt+Home"],
         ["Executar", "Shift+F10"],
         ["Solte arquivos aqui para abrir", ""],
-      ].map(([a, b]) => h("div.wk", null, h("span", null, a), h("kbd", null, b))),
+      ].map(([a, b]) => h("div.wk", null, h("span", null, a), h("kbd", { "data-jb": b }, displayShortcut(b) || b))),
     );
+    window.addEventListener("rits-keymap", () => {
+      empty.querySelectorAll<HTMLElement>("kbd[data-jb]").forEach((k) => (k.textContent = displayShortcut(k.dataset.jb) || k.dataset.jb!));
+      this.renderStripes();
+    });
     this.tabs = new TabManager(empty);
     this.lsp = new LspManager(this.root, {
       openFile: async (path) => (await this.editors.openFile(path))?.view ?? null,
-      progress: (lang, title) => this.setProgress("lsp-" + lang, title ? `${lang === "python" ? "Python" : "Go"}: ${title}` : null),
+      progress: (lang, title) => this.setProgress("lsp-" + lang, title ? `${LSP_LANG_LABEL[lang]}: ${title}` : null),
       log: (lang, line) => {
         this.lspLog.push(`[${lang}] ${line}`);
         if (this.lspLog.length > 500) this.lspLog.shift();
@@ -135,6 +166,9 @@ export class Workbench {
     this.debugger = new Debugger(this);
     this.terminals = new Terminals(this);
     this.problems = new Problems(this);
+    this.syncPlugins();
+    window.addEventListener("rits-plugins", () => this.syncPlugins());
+    window.addEventListener("storage", (e) => e.key?.startsWith("plugin.") && this.syncPlugins());
 
     this.renderToolbar();
     this.renderStripes();
@@ -184,6 +218,15 @@ export class Workbench {
     }
   }
 
+  /** Optional plugins (Docker) add or remove their tool windows when enabled in Settings › Plugins. */
+  syncPlugins() {
+    if (dockerEnabled() && !this.docker) this.docker = new DockerTools(this);
+    else if (!dockerEnabled() && this.docker) {
+      this.docker.dispose();
+      this.docker = null;
+    }
+  }
+
   saveSettings() {
     saveProjectSettings(this.root, this.settings);
   }
@@ -205,8 +248,117 @@ export class Workbench {
   // ---------------- tool windows ----------------
 
   register(tw: ToolWindow) {
+    tw.order ??= (this.toolWindows.size + 1) * 10;
+    this.defaultPlacement.set(tw.id, { anchor: tw.anchor, side: tw.side, order: tw.order });
+    const saved = loadToolLayout()[tw.id];
+    if (saved) Object.assign(tw, { anchor: saved.anchor, side: saved.side, order: saved.order });
     this.toolWindows.set(tw.id, tw);
     this.renderStripes();
+  }
+
+  unregister(id: string) {
+    const tw = this.toolWindows.get(id);
+    if (!tw) return;
+    if (this.visible[tw.anchor] === id) this.hide(tw.anchor);
+    this.toolWindows.delete(id);
+    this.renderStripes();
+  }
+
+  private saveToolLayout() {
+    const all = loadToolLayout();
+    for (const tw of this.toolWindows.values()) all[tw.id] = { anchor: tw.anchor, side: tw.side, order: tw.order ?? 0 };
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(all));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private zoneOf(tw: ToolWindow): StripeZone {
+    return tw.anchor === "bottom" ? (tw.side === "right" ? "bottom-right" : "bottom-left") : tw.anchor;
+  }
+
+  /** Moves a tool window to a stripe zone at a position, keeping it open if it was. */
+  private placeToolWindow(tw: ToolWindow, zone: StripeZone, index: number) {
+    const wasVisible = this.isVisible(tw.id);
+    if (wasVisible) this.hide(tw.anchor);
+    tw.anchor = zone.startsWith("bottom") ? "bottom" : (zone as Anchor);
+    tw.side = zone === "bottom-right" || zone === "right" ? "right" : "left";
+    const members = [...this.toolWindows.values()].filter((t) => t !== tw && this.zoneOf(t) === zone).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    members.splice(Math.max(0, Math.min(index, members.length)), 0, tw);
+    members.forEach((t, i) => (t.order = (i + 1) * 10));
+    this.saveToolLayout();
+    if (wasVisible) this.show(tw.id);
+    else this.renderStripes();
+  }
+
+  /** Drag a stripe button to reorder it or move it to another stripe (JetBrains-style). */
+  private stripeDrag(tw: ToolWindow, btn: HTMLElement, e: PointerEvent) {
+    if (e.button !== 0) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let ghost: HTMLElement | null = null;
+    let drop: { zone: StripeZone; index: number } | null = null;
+    const marker = h("div.stripe-drop");
+    const move = (ev: PointerEvent) => {
+      if (!ghost) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+        ghost = btn.cloneNode(true) as HTMLElement;
+        ghost.classList.add("stripe-ghost");
+        document.body.append(ghost, marker);
+        btn.classList.add("dragging");
+        document.body.classList.add("stripe-dragging");
+        closeMenus();
+      }
+      ghost.style.transform = `translate(${ev.clientX - 17}px, ${ev.clientY - 17}px)`;
+      drop = this.stripeDropAt(ev.clientX, ev.clientY, tw, marker);
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      if (!ghost) return;
+      ghost.remove();
+      marker.remove();
+      btn.classList.remove("dragging");
+      document.body.classList.remove("stripe-dragging");
+      this.suppressStripeClick = true;
+      setTimeout(() => (this.suppressStripeClick = false));
+      if (drop) this.placeToolWindow(tw, drop.zone, drop.index);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  }
+
+  /** Finds the zone and index under the pointer and positions the insertion marker. */
+  private stripeDropAt(x: number, y: number, dragged: ToolWindow, marker: HTMLElement): { zone: StripeZone; index: number } | null {
+    const stripes = [
+      { side: "left" as const, el: this.stripeLeft },
+      { side: "right" as const, el: this.stripeRight },
+    ];
+    const near = stripes
+      .map((s) => ({ ...s, r: s.el.getBoundingClientRect() }))
+      .map((s) => ({ ...s, d: x < s.r.left ? s.r.left - x : x > s.r.right ? x - s.r.right : 0 }))
+      .sort((a, b) => a.d - b.d)[0];
+    if (!near || near.d > 140) {
+      marker.style.display = "none";
+      return null;
+    }
+    const spacer = near.el.querySelector<HTMLElement>(".grow")?.getBoundingClientRect();
+    const bottomGroup = spacer ? y > spacer.top + spacer.height / 2 : false;
+    const zone: StripeZone = bottomGroup ? (near.side === "left" ? "bottom-left" : "bottom-right") : near.side;
+    const items = this.stripeZones[zone].filter((z) => z.tw !== dragged);
+    let index = items.findIndex((z) => {
+      const r = z.el.getBoundingClientRect();
+      return y < r.top + r.height / 2;
+    });
+    if (index < 0) index = items.length;
+    let top: number;
+    if (index < items.length) top = items[index].el.getBoundingClientRect().top - 3;
+    else if (items.length) top = items[items.length - 1].el.getBoundingClientRect().bottom + 1;
+    else if (bottomGroup && spacer) top = spacer.bottom - 6;
+    else top = near.r.top + 4;
+    Object.assign(marker.style, { display: "block", left: near.r.left + 7 + "px", width: near.r.width - 14 + "px", top: top + "px" });
+    return { zone, index };
   }
 
   isVisible(id: string) {
@@ -226,6 +378,7 @@ export class Workbench {
   }
 
   hide(anchor: Anchor) {
+    if (this.visible[anchor]) this.lastVisible[anchor] = this.visible[anchor];
     delete this.visible[anchor];
     this.renderIsland(anchor);
     this.renderStripes();
@@ -277,37 +430,82 @@ export class Workbench {
   }
 
   private twMenu(tw: ToolWindow, e: MouseEvent) {
-    const move = (a: Anchor) => () => {
-      if (this.visible[tw.anchor] === tw.id) this.hide(tw.anchor);
-      tw.anchor = a;
+    const move = (z: StripeZone) => () => {
+      this.placeToolWindow(tw, z, Number.MAX_SAFE_INTEGER);
       this.show(tw.id);
     };
+    const zone = this.zoneOf(tw);
     contextMenu(e.clientX, e.clientY, [
-      { label: "Mover para a esquerda", disabled: tw.anchor === "left", action: move("left") },
-      { label: "Mover para baixo", disabled: tw.anchor === "bottom", action: move("bottom") },
-      { label: "Mover para a direita", disabled: tw.anchor === "right", action: move("right") },
+      { label: "Mover para a esquerda", disabled: zone === "left", action: move("left") },
+      { label: "Mover para baixo (esquerda)", disabled: zone === "bottom-left", action: move("bottom-left") },
+      { label: "Mover para baixo (direita)", disabled: zone === "bottom-right", action: move("bottom-right") },
+      { label: "Mover para a direita", disabled: zone === "right", action: move("right") },
+      { separator: true },
+      { label: "Restaurar layout padrão", action: () => this.resetToolLayout() },
       { separator: true },
       { label: "Ocultar", shortcut: "Shift+Esc", action: () => this.hide(tw.anchor) },
     ]);
   }
 
+  resetToolLayout() {
+    try {
+      localStorage.removeItem(LAYOUT_KEY);
+    } catch {
+      /* ignore */
+    }
+    for (const a of ["left", "right", "bottom"] as Anchor[]) if (this.visible[a]) this.hide(a);
+    for (const [id, p] of this.defaultPlacement) {
+      const tw = this.toolWindows.get(id);
+      if (tw) Object.assign(tw, { anchor: p.anchor, side: p.side, order: p.order });
+    }
+    this.renderStripes();
+    this.show("project");
+  }
+
+  /** Shows the last tool window of a side, or hides the side (VS Code: Cmd+B, Cmd+J, Cmd+Alt+B). */
+  toggleSide(anchor: Anchor, fallback: string) {
+    if (this.visible[anchor]) return this.hide(anchor);
+    const id = this.lastVisible[anchor];
+    const tw = id ? this.toolWindows.get(id) : undefined;
+    const first = [...this.toolWindows.values()].filter((t) => t.anchor === anchor).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
+    const pick = tw && tw.anchor === anchor ? tw.id : this.toolWindows.get(fallback)?.anchor === anchor ? fallback : first?.id;
+    if (pick) this.show(pick, true);
+  }
+
+  /** Hides every tool window (VS Code: Cmd+K Z, JetBrains: Ctrl+Shift+F12). */
+  hideAll() {
+    for (const a of ["left", "right", "bottom"] as Anchor[]) if (this.visible[a]) this.hide(a);
+    this.editors.active()?.focus();
+  }
+
   private renderStripes() {
+    const zones: Record<StripeZone, { tw: ToolWindow; el: HTMLElement }[]> = { left: [], right: [], "bottom-left": [], "bottom-right": [] };
     const btn = (tw: ToolWindow) => {
       const b = h(
         "button.stripe-btn",
-        { class: this.visible[tw.anchor] === tw.id ? "active" : "", title: tw.title + (tw.shortcut ? `  ${tw.shortcut}` : ""), onclick: () => this.toggle(tw.id) },
+        {
+          class: this.visible[tw.anchor] === tw.id ? "active" : "",
+          title: tw.title + (displayShortcut(tw.shortcut) ? `  ${displayShortcut(tw.shortcut)}` : "") + "\nArraste para mover",
+          onclick: () => !this.suppressStripeClick && this.toggle(tw.id),
+          onpointerdown: (e: PointerEvent) => this.stripeDrag(tw, b, e),
+        },
         twIcon(tw.icon),
         tw.badge ? h("span.badge-dot") : null,
       );
+      zones[this.zoneOf(tw)].push({ tw, el: b });
       return b;
     };
-    const all = [...this.toolWindows.values()];
-    const left = all.filter((t) => t.anchor === "left");
-    const bottom = all.filter((t) => t.anchor === "bottom");
-    const right = all.filter((t) => t.anchor === "right");
-    this.stripeLeft.replaceChildren(...left.map(btn), left.length && bottom.length ? h("span.stripe-sep") : "", h("span.grow"), ...bottom.map(btn));
-    this.stripeRight.replaceChildren(...right.map(btn), h("span.grow"), twIcon("notifications"));
-    (this.stripeRight.lastElementChild as HTMLElement).style.opacity = "0.7";
+    const all = [...this.toolWindows.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const of = (z: StripeZone) => all.filter((t) => this.zoneOf(t) === z).map(btn);
+    const left = of("left");
+    const bottomLeft = of("bottom-left");
+    const right = of("right");
+    const bottomRight = of("bottom-right");
+    this.stripeZones = zones;
+    this.stripeLeft.replaceChildren(...left, left.length && bottomLeft.length ? h("span.stripe-sep") : "", h("span.grow"), ...bottomLeft);
+    const bell = twIcon("notifications");
+    bell.style.opacity = "0.7";
+    this.stripeRight.replaceChildren(...right, h("span.grow"), ...bottomRight, bottomRight.length ? h("span.stripe-sep") : "", bell);
   }
 
   private initSplitters() {
@@ -648,9 +846,9 @@ export class Workbench {
         widgets.push(
           h(
             "button.sb-widget",
-            { title: `Servidor de linguagem ${ll === "python" ? "basedpyright" : "gopls"}: ${st === "ready" ? "ativo" : st === "starting" ? "iniciando" : "desligado"}`, onclick: (e: MouseEvent) => this.lspMenu(ll, e) },
+            { title: `Servidor de linguagem ${LSP_NAME[ll]}: ${st === "ready" ? "ativo" : st === "starting" ? "iniciando" : "desligado"}`, onclick: (e: MouseEvent) => this.lspMenu(ll, e) },
             icon(st === "ready" ? "status/success" : st === "starting" ? "general/refresh" : "status/warningOutline", st === "starting" ? "spin" : ""),
-            ll === "python" ? "Pyright" : "gopls",
+            LSP_NAME[ll],
           ),
         );
       }
@@ -678,10 +876,11 @@ export class Workbench {
   private pluginMissing(lang: LspLang) {
     if (this.missingShown.has(lang)) return;
     this.missingShown.add(lang);
-    const name = lang === "python" ? "Python (basedpyright)" : "Go (gopls)";
+    const infra = lang === "terraform" || lang === "dockerfile" || lang === "yaml";
+    const name = lang === "python" ? "Python (basedpyright)" : lang === "go" ? "Go (gopls)" : `Infraestrutura (${LSP_NAME[lang]})`;
     import("../ui").then(({ notify }) =>
       notify(`Plugin ${name} não instalado`, "Autocomplete, navegação e análise de código precisam do servidor de linguagem.", "info", [
-        { label: "Instalar agora", run: () => openSettings(this, "plugins", lang) },
+        { label: "Instalar agora", run: () => openSettings(this, "plugins", infra ? "infra" : lang) },
       ], 15000),
     );
   }
@@ -698,6 +897,67 @@ export class Workbench {
 
   // ---------------- keyboard ----------------
 
+  private chordUntil = 0;
+
+  /** VS Code keymap. "pass" lets the key reach the editor (its own VS Code bindings) without JetBrains handling. */
+  private vscodeKey(e: KeyboardEvent, kl: string, run: (fn: () => void) => void): "handled" | "pass" | false {
+    const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+    const ctl = e.ctrlKey;
+    const sh = e.shiftKey;
+    const alt = e.altKey;
+    const k = e.key;
+    const ed = () => this.editors.active();
+    if (["Meta", "Control", "Shift", "Alt"].includes(k)) return false;
+    // second key of a Mod+K chord
+    if (Date.now() < this.chordUntil) {
+      this.chordUntil = 0;
+      if (kl === "z") return run(() => this.hideAll()), "handled";
+      if (kl === "s" && mod) return run(() => openSettings(this, "keymap")), "handled";
+      if (kl === "i" && mod) return run(() => ed()?.command("hover")), "handled";
+      if (kl === "w" && mod) return run(() => [...this.tabs.tabs].forEach((t) => this.tabs.close(t))), "handled";
+      return run(() => {}), "handled";
+    }
+    if (mod && !sh && !alt && kl === "k") {
+      e.preventDefault();
+      e.stopPropagation();
+      this.chordUntil = Date.now() + 1500;
+      return "handled";
+    }
+    if ((mod && sh && kl === "p") || k === "F1") return run(() => searchEverywhere(this, "actions")), "handled";
+    if (mod && !sh && !alt && kl === "p") return run(() => searchEverywhere(this, "files")), "handled";
+    if (mod && !sh && !alt && kl === "t") return run(() => searchEverywhere(this, "symbols")), "handled";
+    if (mod && sh && kl === "o") return run(() => fileStructurePopup(this)), "handled";
+    if (mod && !sh && !alt && kl === "b") return run(() => this.toggleSide("left", "project")), "handled";
+    if (mod && alt && !sh && kl === "b") return run(() => this.toggleSide("right", "database")), "handled";
+    if (mod && !sh && !alt && kl === "j") return run(() => this.toggleSide("bottom", "terminal")), "handled";
+    if (ctl && e.code === "Backquote") {
+      if (sh) return run(() => (this.show("terminal"), this.terminals.newTab())), "handled";
+      return run(() => this.toggle("terminal")), "handled";
+    }
+    if (mod && sh && kl === "e") return run(() => this.toggle("project")), "handled";
+    if (mod && sh && kl === "d") return run(() => this.toggle("debug")), "handled";
+    if (mod && sh && kl === "m") return run(() => this.toggle("problems")), "handled";
+    if (mod && sh && kl === "u") return run(() => this.toggle("run")), "handled";
+    if (mod && sh && kl === "x") return run(() => openSettings(this, "plugins")), "handled";
+    if (ctl && sh && kl === "g") return run(() => this.toggle("commit")), "handled";
+    if (mod && !sh && (e.code === "Comma" || k === ",")) return run(() => openSettings(this)), "handled";
+    if (mod && !sh && !alt && kl === "w") return run(() => this.tabs.active && this.tabs.close(this.tabs.active)), "handled";
+    if (mod && !sh && !alt && e.code === "Digit1") return run(() => ed()?.focus()), "handled";
+    if (k === "F5" && !mod && !sh && !ctl) return run(() => (this.debugger.active ? this.debugger.resume() : this.runner.runSelected(true))), "handled";
+    if (k === "F5" && ctl && !sh) return run(() => this.runner.runSelected(false)), "handled";
+    if (k === "F5" && sh) return run(() => this.runner.stopAll()), "handled";
+    if (k === "F9" && !sh && !mod) return run(() => ed()?.toggleBreakpointAtCursor()), "handled";
+    if (this.debugger.active && !mod && !ctl) {
+      if (k === "F10" && !sh) return run(() => this.debugger.stepOver()), "handled";
+      if (k === "F11" && !sh) return run(() => this.debugger.stepInto()), "handled";
+      if (k === "F11" && sh) return run(() => this.debugger.stepOut()), "handled";
+    }
+    // VS Code editor keys that JetBrains maps globally (push, pull, commit, duplicate...)
+    if (mod && ((sh && kl === "k") || (!sh && ["d", "y"].includes(kl)))) return "pass";
+    if (IS_MAC && e.metaKey && kl === "g") return "pass";
+    return false;
+  }
+
   private installKeys() {
     let lastShift = 0;
     document.addEventListener(
@@ -705,7 +965,8 @@ export class Workbench {
       (e) => {
         const ctrl = e.ctrlKey || e.metaKey;
         const k = e.key;
-        const kl = k.toLowerCase();
+        // Physical key: Option on macOS changes e.key ("⌥⌘S" gives "ß"), so prefer e.code for letters.
+        const kl = e.code.startsWith("Key") ? e.code.slice(3).toLowerCase() : k.toLowerCase();
         if (k === "Shift" && !e.repeat && !ctrl && !e.altKey) {
           const now = Date.now();
           if (now - lastShift < 350) {
@@ -720,6 +981,10 @@ export class Workbench {
           closeMenus();
           fn();
         };
+        if (keymapId() === "vscode") {
+          const r = this.vscodeKey(e, kl, run);
+          if (r === "handled" || r === "pass") return;
+        } else if (ctrl && e.shiftKey && k === "F12") return run(() => this.hideAll());
         if (ctrl && e.shiftKey && kl === "n") run(() => searchEverywhere(this, "files"));
         else if (ctrl && e.altKey && e.shiftKey && kl === "n") run(() => searchEverywhere(this, "symbols"));
         else if (ctrl && !e.shiftKey && kl === "n" && !e.altKey) run(() => searchEverywhere(this, "symbols"));
@@ -733,9 +998,10 @@ export class Workbench {
         else if (ctrl && e.altKey && kl === "s") run(() => openSettings(this));
         else if (ctrl && !e.shiftKey && kl === "s" && !e.altKey) run(() => this.editors.saveAll());
         else if (e.altKey && k === "F12") run(() => this.toggle("terminal"));
-        else if (e.altKey && !ctrl && /^[0-9]$/.test(k)) {
-          const map: Record<string, string> = { "1": "project", "2": "database", "4": "run", "5": "debug", "6": "problems", "7": "structure", "8": "services", "9": "git", "0": "commit" };
-          if (map[k]) run(() => this.toggle(map[k]));
+        else if (e.altKey && !ctrl && /^Digit[0-9]$/.test(e.code)) {
+          const map: Record<string, string> = { "1": "project", "2": "database", "3": "find", "4": "run", "5": "debug", "6": "problems", "7": "structure", "8": "services", "9": "git", "0": "commit" };
+          const d = e.code.slice(5);
+          if (map[d]) run(() => this.toggle(map[d]));
         } else if (ctrl && !e.shiftKey && kl === "k") run(() => this.show("commit", true));
         else if (ctrl && e.shiftKey && kl === "k") run(() => this.git.push());
         else if (ctrl && !e.shiftKey && kl === "t") run(() => this.git.pull());
@@ -775,8 +1041,18 @@ export async function openProjectWindow(path: string) {
     title: P.base(path),
     width: 1440,
     height: 900,
-    decorations: false,
     center: true,
+    // macOS keeps the native traffic lights over the app's own title bar; elsewhere the window is frameless.
+    ...(IS_MAC
+      ? {
+          decorations: true,
+          titleBarStyle: "overlay" as const,
+          hiddenTitle: true,
+          trafficLightPosition: new LogicalPosition(14, 20),
+          transparent: true,
+          windowEffects: { effects: [Effect.LiquidGlassRegular, Effect.UnderWindowBackground], state: EffectState.FollowsWindowActiveState },
+        }
+      : { decorations: false }),
   });
   w.once("tauri://error", (e) => toast(String(e.payload), "error"));
 }

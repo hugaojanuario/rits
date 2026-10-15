@@ -1,4 +1,4 @@
-use super::{err_chain, ColumnInfo, CompletionTable, DbObject, IndexInfo, QueryResult, ServerInfo, MAX_ROWS};
+use super::{err_chain, ColumnInfo, CompletionTable, DbObject, DiagramInfo, DiagramTable, ForeignKey, IndexInfo, QueryResult, ServerInfo, MAX_ROWS};
 use crate::store::ConnConfig;
 use mysql_async::prelude::*;
 use mysql_async::{Conn, OptsBuilder, Row, SslOpts, Value};
@@ -201,6 +201,55 @@ impl MyConn {
                 }
             })
             .collect())
+    }
+
+    pub async fn diagram(&self, schema: &str) -> Result<DiagramInfo, String> {
+        let cols = self
+            .rows(
+                "SELECT c.TABLE_NAME, c.COLUMN_NAME, c.COLUMN_TYPE, c.IS_NULLABLE = 'YES', c.COLUMN_KEY = 'PRI',
+                        IF(t.TABLE_TYPE = 'VIEW', 'view', 'table'), c.COLUMN_COMMENT
+                 FROM information_schema.COLUMNS c
+                 JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME
+                 WHERE c.TABLE_SCHEMA = ? ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION",
+                vec![schema.into()],
+            )
+            .await?;
+        let mut tables: Vec<DiagramTable> = vec![];
+        for x in &cols {
+            let t = s(x, 0);
+            if tables.last().map(|l| l.name != t).unwrap_or(true) {
+                tables.push(DiagramTable { name: t.clone(), kind: s(x, 5), columns: vec![] });
+            }
+            tables.last_mut().unwrap().columns.push(ColumnInfo {
+                name: s(x, 1),
+                data_type: s(x, 2),
+                nullable: s(x, 3) == "1",
+                default: None,
+                pk: s(x, 4) == "1",
+                comment: os(x, 6).filter(|c| !c.is_empty()),
+            });
+        }
+        let rows = self
+            .rows(
+                "SELECT CONSTRAINT_NAME, TABLE_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, COLUMN_NAME, REFERENCED_COLUMN_NAME
+                 FROM information_schema.KEY_COLUMN_USAGE
+                 WHERE TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME IS NOT NULL
+                 ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
+                vec![schema.into()],
+            )
+            .await?;
+        let mut fks: Vec<ForeignKey> = vec![];
+        for x in &rows {
+            let (name, table) = (s(x, 0), s(x, 1));
+            match fks.last_mut() {
+                Some(f) if f.name == name && f.table == table => {
+                    f.columns.push(s(x, 4));
+                    f.ref_columns.push(s(x, 5));
+                }
+                _ => fks.push(ForeignKey { name, table, ref_schema: s(x, 2), ref_table: s(x, 3), columns: vec![s(x, 4)], ref_columns: vec![s(x, 5)] }),
+            }
+        }
+        Ok(DiagramInfo { tables, fks })
     }
 
     pub async fn indexes(&self, schema: &str, table: &str) -> Result<Vec<IndexInfo>, String> {

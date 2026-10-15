@@ -63,7 +63,7 @@ export const host = {
     invoke<SearchHit[]>("fs_search", { root, query, ...o }),
   watch: (root: string) => invoke<void>("fs_watch", { root }),
   unwatch: (root: string) => invoke<void>("fs_unwatch", { root }),
-  reveal: (path: string) => invoke<void>("reveal_in_explorer", { path: path.replace(/\//g, "\\") }),
+  reveal: (path: string) => invoke<void>("reveal_in_explorer", { path: P.win(path) }),
   spawn: (spec: SpawnSpec) => invoke<number>("proc_spawn", { spec: { args: [], cwd: "", env: {}, mode: "plain", ...spec } }),
   connect: (id: string, addr: string) => invoke<void>("proc_connect", { id, addr }),
   write_: (id: string, data: string) => invoke<void>("proc_write", { id, data }),
@@ -126,6 +126,18 @@ export function onFsChange(cb: (root: string, paths: string[]) => void): Promise
   return listen<{ root: string; paths: string[] }>("fs-change", (e) => cb(e.payload.root, e.payload.paths));
 }
 
+// ---- platform ----
+export const IS_WIN = /Windows/i.test(navigator.userAgent);
+export const IS_MAC = /Macintosh|Mac OS X/i.test(navigator.userAgent);
+/** Suffix of native executables ("python.exe" on Windows, "python" elsewhere). */
+export const EXE = IS_WIN ? ".exe" : "";
+/** Install commands suggested to the user (winget on Windows, Homebrew on macOS). */
+export const INSTALL = IS_WIN
+  ? { go: "winget install GoLang.Go", python: "winget install Python.Python.3.13", git: "winget install Git.Git", pg: "winget install PostgreSQL.PostgreSQL", mysql: "winget install Oracle.MySQL" }
+  : { go: "brew install go", python: "brew install python", git: "xcode-select --install", pg: "brew install libpq", mysql: "brew install mysql-client" };
+/** Label of the "reveal in file manager" action. */
+export const REVEAL_LABEL = IS_MAC ? "Mostrar no Finder" : IS_WIN ? "Abrir no Explorer" : "Abrir no gerenciador de arquivos";
+
 // ---- path helpers (paths are kept with forward slashes) ----
 export const P = {
   norm: (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, ""),
@@ -148,11 +160,13 @@ export const P = {
   },
   same: (a: string, b: string) => P.norm(a).toLowerCase() === P.norm(b).toLowerCase(),
   inside: (root: string, p: string) => P.norm(p).toLowerCase().startsWith(P.norm(root).toLowerCase() + "/") || P.same(root, p),
-  win: (p: string) => p.replace(/\//g, "\\"),
+  /** Native form for processes and the user (backslashes on Windows, unchanged elsewhere). */
+  win: (p: string) => (IS_WIN ? p.replace(/\//g, "\\") : p),
+  isAbs: (p: string) => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("/") || p.startsWith("\\\\"),
   uri: (p: string) => "file:///" + P.norm(p).replace(/^\//, "").split("/").map((s, i) => (i === 0 && /^[A-Za-z]:$/.test(s) ? s.toUpperCase() : encodeURIComponent(s))).join("/"),
   fromUri: (u: string) => {
-    let p = decodeURIComponent(u.replace(/^file:\/\/\/?/, ""));
-    if (/^[a-zA-Z]:/.test(p)) p = p[0].toUpperCase() + p.slice(1);
+    let p = decodeURIComponent(u.replace(/^file:\/\//, ""));
+    if (/^\/[a-zA-Z]:/.test(p)) p = p[1].toUpperCase() + p.slice(2);
     return P.norm(p);
   },
 };

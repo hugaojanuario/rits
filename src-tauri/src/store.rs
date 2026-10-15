@@ -9,6 +9,20 @@ use tauri::{AppHandle, Manager};
 pub enum DbKind {
     Postgres,
     Mysql,
+    Sqlserver,
+    Oracle,
+    Firebird,
+    Sqlite,
+    Duckdb,
+    Clickhouse,
+    Mongodb,
+}
+
+impl DbKind {
+    /// Compiled-in drivers; the others run through an on-demand driver (db::ext).
+    pub fn is_native(&self) -> bool {
+        matches!(self, DbKind::Postgres | DbKind::Mysql)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +48,9 @@ pub struct ConnConfig {
     pub color: String,
     #[serde(default)]
     pub read_only: bool,
+    /// Project folder the connection belongs to; empty = shown in every project.
+    #[serde(default)]
+    pub project: String,
 }
 
 impl ConnConfig {
@@ -43,7 +60,8 @@ impl ConnConfig {
         }
         match self.kind {
             DbKind::Postgres => "postgres".into(),
-            DbKind::Mysql => String::new(),
+            DbKind::Sqlite | DbKind::Duckdb => "main".into(),
+            _ => String::new(),
         }
     }
 }

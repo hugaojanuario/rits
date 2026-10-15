@@ -1,6 +1,9 @@
 // Generic UI primitives: modal, confirm/prompt, context menu, toasts.
 import { h } from "./util";
 import { icon } from "./icons";
+import { displayShortcut } from "./ide/keymap";
+
+const SHORTCUT_RE = /^(Ctrl|Alt|Shift|F\d)/;
 
 export interface ModalHandle {
   root: HTMLElement;
@@ -141,7 +144,7 @@ function buildMenu(items: MenuItem[]): HTMLElement {
       { class: [it.danger && "danger", it.disabled && "disabled"].filter(Boolean).join(" ") },
       it.icon ? icon(it.icon) : h("span.ic"),
       h("span.menu-label", null, it.label ?? ""),
-      it.shortcut ? h("span.menu-key", null, it.shortcut) : null,
+      it.shortcut && displayShortcut(it.shortcut) ? h("span.menu-key", null, displayShortcut(it.shortcut)) : null,
       it.submenu ? icon("chevronR", "menu-sub-arrow") : null,
     );
     if (it.submenu) {
@@ -252,6 +255,8 @@ export interface PopupOptions {
   tall?: boolean;
   placeholder?: string;
   footer?: HTMLElement;
+  /** Denser rows and no title, for quick pickers anchored at a button. */
+  compact?: boolean;
 }
 
 let openPopupEl: HTMLElement | null = null;
@@ -270,7 +275,7 @@ export function popupList(anchor: HTMLElement | { x: number; y: number }, items:
   const searchI = h("input.input.popup-search", { placeholder: opts.placeholder ?? "Buscar…", spellcheck: false }) as HTMLInputElement;
   const pop = h(
     "div.popup",
-    { style: `width:${opts.width ?? 380}px` },
+    { style: `width:${opts.width ?? 380}px`, class: opts.compact ? "compact" : "" },
     opts.title ? h("div.popup-head", null, opts.title) : null,
     opts.search !== false && items.length > 7 ? searchI : null,
     list,
@@ -295,7 +300,7 @@ export function popupList(anchor: HTMLElement | { x: number; y: number }, items:
         { class: [i === active && "active", it.current && "current", (opts.tall || it.sub) && "tall"].filter(Boolean).join(" ") },
         ic,
         h("div.pi-text", null, h("span.pi-main", null, it.label), it.sub ? h("span.pi-sub", null, it.sub) : null),
-        it.right ? h("span.pi-right", null, it.right) : null,
+        it.right ? h("span.pi-right", null, SHORTCUT_RE.test(it.right) ? displayShortcut(it.right) : it.right) : null,
         it.children ? icon("general/chevronRight", "pi-arrow") : null,
       );
       row.addEventListener("mousemove", () => {

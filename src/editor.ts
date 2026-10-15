@@ -1,7 +1,9 @@
 // CodeMirror setup shared by consoles and DDL viewers.
 import { EditorView, keymap, Decoration, ViewPlugin, type DecorationSet, type ViewUpdate, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, rectangularSelection, crosshairCursor, highlightActiveLine } from "@codemirror/view";
 import { EditorState, Compartment, RangeSetBuilder, type Extension } from "@codemirror/state";
-import { sql, PostgreSQL, MySQL, type SQLNamespace } from "@codemirror/lang-sql";
+import { sql, PostgreSQL, MySQL, MSSQL, PLSQL, SQLite, StandardSQL, type SQLDialect, type SQLNamespace } from "@codemirror/lang-sql";
+import { javascript } from "@codemirror/lang-javascript";
+import { dialect } from "./dialects";
 import { HighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching, foldGutter, foldKeymap } from "@codemirror/language";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab, toggleComment } from "@codemirror/commands";
@@ -107,8 +109,10 @@ export function createEditor(
   const lang = new Compartment();
   const ro = new Compartment();
   let curKind = kind;
-  const langExt = (k: DbKind, ns: SQLNamespace = {}, def?: string) =>
-    sql({ dialect: k === "postgres" ? PostgreSQL : MySQL, schema: ns, defaultSchema: def, upperCaseKeywords: true });
+  const CM_DIALECT: Record<string, SQLDialect> = { pg: PostgreSQL, mysql: MySQL, clickhouse: MySQL, sqlserver: MSSQL, oracle: PLSQL, sqlite: SQLite, duckdb: PostgreSQL, firebird: StandardSQL };
+  // MongoDB consoles take mongosh-style JavaScript.
+  const langExt = (k: DbKind, ns: SQLNamespace = {}, def?: string): Extension =>
+    dialect(k).family === "mongo" ? javascript() : sql({ dialect: CM_DIALECT[dialect(k).family] ?? StandardSQL, schema: ns, defaultSchema: def, upperCaseKeywords: true });
   const view = new EditorView({
     parent,
     state: EditorState.create({

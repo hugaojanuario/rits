@@ -74,7 +74,37 @@ pub fn hidden(c: &mut Command) {
     {
         c.creation_flags(0x0800_0000);
     }
+    // Own process group, so kill_tree can stop children too (go run, pytest workers...).
+    #[cfg(unix)]
+    {
+        c.process_group(0);
+    }
     let _ = c;
+}
+
+/// GUI apps on macOS start with a minimal PATH (/usr/bin:/bin:...), without Homebrew, pyenv, Go etc.
+/// Adopts the PATH of the user's login shell once at startup, like a terminal would see it.
+#[cfg(target_os = "macos")]
+pub fn adopt_login_shell_path() {
+    const MARK: &str = "__RITS_PATH__";
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let child = std::process::Command::new(&shell)
+        .args(["-ilc", &format!("printf '{MARK}%s{MARK}' \"$PATH\"")])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn();
+    let Ok(child) = child else { return };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    // A broken shell profile must not block the app from starting.
+    let Ok(Ok(out)) = rx.recv_timeout(std::time::Duration::from_secs(3)) else { return };
+    let text = String::from_utf8_lossy(&out.stdout);
+    if let Some(path) = text.split(MARK).nth(1).filter(|p| !p.trim().is_empty()) {
+        std::env::set_var("PATH", path);
+    }
 }
 
 /// Locates an executable on PATH plus well-known tool folders (Go bin, Python Scripts).
@@ -107,8 +137,20 @@ pub fn default_tool_dirs() -> Vec<PathBuf> {
         v.push(home.join("go").join("bin"));
         v.push(home.join(".local").join("bin"));
     }
-    v.push(PathBuf::from(r"C:\Program Files\Go\bin"));
-    v.push(PathBuf::from(r"C:\Program Files\Git\cmd"));
+    if cfg!(windows) {
+        v.push(PathBuf::from(r"C:\Program Files\Go\bin"));
+        v.push(PathBuf::from(r"C:\Program Files\Git\cmd"));
+    } else {
+        if let Some(home) = std::env::var_os("HOME") {
+            let home = PathBuf::from(home);
+            v.push(home.join(".pyenv").join("shims"));
+            v.push(home.join(".cargo").join("bin"));
+        }
+        for d in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/go/bin", "/opt/local/bin"] {
+            v.push(PathBuf::from(d));
+        }
+        v.push(PathBuf::from("/Library/Frameworks/Python.framework/Versions/Current/bin"));
+    }
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
         let base = PathBuf::from(local).join("Programs").join("Python");
         if let Ok(rd) = std::fs::read_dir(&base) {
@@ -353,7 +395,18 @@ pub async fn kill_tree(pid: u32) {
     }
     #[cfg(not(windows))]
     {
-        let _ = Command::new("kill").args(["-9", &pid.to_string()]).status().await;
+        // Processes are spawned as group leaders (see hidden), so kill the whole group first.
+        let quiet = |c: &mut Command| {
+            c.stdout(Stdio::null()).stderr(Stdio::null());
+        };
+        let mut g = Command::new("kill");
+        g.args(["-9", "--", &format!("-{pid}")]);
+        quiet(&mut g);
+        let _ = g.status().await;
+        let mut p = Command::new("kill");
+        p.args(["-9", &pid.to_string()]);
+        quiet(&mut p);
+        let _ = p.status().await;
     }
 }
 
@@ -365,6 +418,9 @@ pub struct Captured {
     pub stderr: String,
 }
 
+// macOS has no "C.UTF-8" locale before Sonoma; en_US.UTF-8 exists everywhere there.
+const UTF8_LOCALE: &str = if cfg!(target_os = "macos") { "en_US.UTF-8" } else { "C.UTF-8" };
+
 /// Runs a command to completion and returns its output (git, go env, python -c ...).
 pub async fn capture(program: &str, args: &[String], cwd: &str, input: Option<String>, timeout_s: u64) -> Result<Captured, String> {
     let exe = which(program, &[]).unwrap_or_else(|| program.to_string());
@@ -373,7 +429,7 @@ pub async fn capture(program: &str, args: &[String], cwd: &str, input: Option<St
     if !cwd.is_empty() {
         c.current_dir(cwd);
     }
-    c.env("PATH", augmented_path(&[])).env("PYTHONUTF8", "1").env("GIT_TERMINAL_PROMPT", "0").env("LC_ALL", "C.UTF-8");
+    c.env("PATH", augmented_path(&[])).env("PYTHONUTF8", "1").env("GIT_TERMINAL_PROMPT", "0").env("LC_ALL", UTF8_LOCALE);
     c.kill_on_drop(true);
     hidden(&mut c);
     let mut child = c.spawn().map_err(|e| format!("'{program}' não encontrado ou falhou ao iniciar: {e}"))?;
@@ -415,7 +471,7 @@ pub fn pty_open(app: AppHandle, terms: &Terms, owner: &str, id: String, shell: S
     let pty = native_pty_system();
     let pair = pty.openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
     let mut parts = shell.split_whitespace();
-    let prog = parts.next().unwrap_or("powershell.exe");
+    let prog = parts.next().unwrap_or(if cfg!(windows) { "powershell.exe" } else { "/bin/sh" });
     let mut cmd = CommandBuilder::new(which(prog, &[]).unwrap_or_else(|| prog.to_string()));
     for a in parts {
         cmd.arg(a);
@@ -426,6 +482,9 @@ pub fn pty_open(app: AppHandle, terms: &Terms, owner: &str, id: String, shell: S
     let front: Vec<String> = env.get("RITS_PATH_PREPEND").map(|s| s.split(';').map(str::to_string).collect()).unwrap_or_default();
     cmd.env("PATH", augmented_path(&front));
     cmd.env("TERM", "xterm-256color");
+    if !cfg!(windows) {
+        cmd.env("LANG", std::env::var("LANG").unwrap_or_else(|_| UTF8_LOCALE.into()));
+    }
     for (k, v) in &env {
         if k != "RITS_PATH_PREPEND" {
             cmd.env(k, v);

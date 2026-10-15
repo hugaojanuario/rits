@@ -2,3 +2,7 @@ node_modules
 dist
 src-tauri/target
 src-tauri/gen
+
+# Python caches (drivers host)
+__pycache__/
+*.pyc

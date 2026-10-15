@@ -78,12 +78,33 @@ pub fn fs_unwatch(w: State<'_, Watchers>, root: String) {
 
 #[tauri::command]
 pub fn reveal_in_explorer(path: String) -> Result<(), String> {
-    let mut c = std::process::Command::new("explorer.exe");
-    if std::path::Path::new(&path).is_dir() {
+    let is_dir = std::path::Path::new(&path).is_dir();
+    #[cfg(windows)]
+    let mut c = {
+        let mut c = std::process::Command::new("explorer.exe");
+        if is_dir {
+            c.arg(&path);
+        } else {
+            c.arg(format!("/select,{}", path.replace('/', "\\")));
+        }
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut c = {
+        let mut c = std::process::Command::new("open");
+        if !is_dir {
+            c.arg("-R");
+        }
         c.arg(&path);
-    } else {
-        c.arg(format!("/select,{}", path.replace('/', "\\")));
-    }
+        c
+    };
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let mut c = {
+        let mut c = std::process::Command::new("xdg-open");
+        let p = std::path::Path::new(&path);
+        c.arg(if is_dir { p } else { p.parent().unwrap_or(p) });
+        c
+    };
     c.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
@@ -156,7 +177,12 @@ pub fn env_info() -> EnvInfo {
         home,
         sep: std::path::MAIN_SEPARATOR.to_string(),
         os: std::env::consts::OS.into(),
-        default_shell: if cfg!(windows) { if pwsh { "pwsh.exe -NoLogo".into() } else { "powershell.exe -NoLogo".into() } } else { "bash".into() },
+        default_shell: if cfg!(windows) {
+            if pwsh { "pwsh.exe -NoLogo".into() } else { "powershell.exe -NoLogo".into() }
+        } else {
+            // Login shell, so it reads the user's profile (Homebrew, pyenv...).
+            format!("{} -l", std::env::var("SHELL").unwrap_or_else(|_| if cfg!(target_os = "macos") { "/bin/zsh".into() } else { "/bin/bash".into() }))
+        },
         username: std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default(),
     }
 }

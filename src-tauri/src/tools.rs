@@ -80,10 +80,15 @@ fn candidate_dirs(kind: &DbKind, custom: &str) -> Vec<PathBuf> {
     if let Some(path) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&path));
     }
+    if !cfg!(windows) {
+        unix_candidate_dirs(kind, &mut dirs);
+        return dirs;
+    }
     let roots = [r"C:\Program Files", r"C:\Program Files (x86)"];
     let patterns: &[&str] = match kind {
         DbKind::Postgres => &["PostgreSQL", "pgAdmin 4"],
         DbKind::Mysql => &["MySQL", "MariaDB"],
+        _ => &[],
     };
     for root in roots {
         for p in patterns {
@@ -96,6 +101,42 @@ fn candidate_dirs(kind: &DbKind, custom: &str) -> Vec<PathBuf> {
         }
     }
     dirs
+}
+
+/// Homebrew kegs (often keg-only, so not on PATH), Postgres.app and the official installers.
+fn unix_candidate_dirs(kind: &DbKind, dirs: &mut Vec<PathBuf>) {
+    let prefixes: &[&str] = match kind {
+        DbKind::Postgres => &["postgresql", "libpq"],
+        DbKind::Mysql => &["mysql", "mariadb"],
+        _ => return,
+    };
+    for root in ["/opt/homebrew/opt", "/usr/local/opt"] {
+        let Ok(rd) = std::fs::read_dir(root) else { continue };
+        let mut found: Vec<PathBuf> = rd
+            .flatten()
+            .filter(|e| prefixes.iter().any(|p| e.file_name().to_string_lossy().starts_with(p)))
+            .map(|e| e.path().join("bin"))
+            .collect();
+        // Newest first ("postgresql@17" > "postgresql@16"); unversioned formulas last.
+        found.sort_by(|a, b| natural_cmp(&b.to_string_lossy(), &a.to_string_lossy()));
+        dirs.extend(found);
+    }
+    dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
+    match kind {
+        DbKind::Postgres => {
+            let mut found = vec![];
+            collect_bins(Path::new("/Applications/Postgres.app/Contents/Versions"), 1, &mut found);
+            found.sort_by(|a, b| natural_cmp(&b.to_string_lossy(), &a.to_string_lossy()));
+            dirs.extend(found);
+            dirs.push(PathBuf::from("/Library/PostgreSQL/bin"));
+            let mut found = vec![];
+            collect_bins(Path::new("/Library/PostgreSQL"), 1, &mut found);
+            found.sort_by(|a, b| natural_cmp(&b.to_string_lossy(), &a.to_string_lossy()));
+            dirs.extend(found);
+        }
+        DbKind::Mysql => dirs.push(PathBuf::from("/usr/local/mysql/bin")),
+        _ => {}
+    }
 }
 
 fn collect_bins(dir: &Path, depth: u8, out: &mut Vec<PathBuf>) {
@@ -128,6 +169,7 @@ pub async fn detect(cfg: &ConnConfig) -> Vec<ToolStatus> {
     let names: &[&str] = match cfg.kind {
         DbKind::Postgres => &["pg_dump", "pg_restore", "psql"],
         DbKind::Mysql => &["mysqldump", "mysql"],
+        _ => &[],
     };
     let mut out = vec![];
     for n in names {
@@ -143,6 +185,7 @@ pub async fn detect(cfg: &ConnConfig) -> Vec<ToolStatus> {
     out
 }
 
+#[cfg_attr(not(windows), allow(unused_mut))]
 fn hidden(mut c: Command) -> Command {
     #[cfg(windows)]
     {
@@ -186,6 +229,7 @@ fn require(cfg: &ConnConfig, name: &str) -> Result<PathBuf, String> {
             match cfg.kind {
                 DbKind::Postgres => "PostgreSQL",
                 DbKind::Mysql => "MySQL/MariaDB",
+                _ => "banco",
             }
         )
     })
@@ -343,6 +387,7 @@ pub async fn run(app: AppHandle, cfg: ConnConfig, t: TaskSpec) -> Result<i32, St
     let plan = match cfg.kind {
         DbKind::Postgres => pg_plan(&cfg, &t)?,
         DbKind::Mysql => my_plan(&cfg, &t)?,
+        _ => return Err("Backup e restauração só estão disponíveis para PostgreSQL e MySQL/MariaDB.".into()),
     };
     let program = require(&cfg, plan.tool)?;
     let emit = |kind: &str, line: String| {
@@ -362,6 +407,7 @@ pub async fn run(app: AppHandle, cfg: ConnConfig, t: TaskSpec) -> Result<i32, St
         DbKind::Mysql => {
             cmd.env("MYSQL_PWD", &cfg.password);
         }
+        _ => {}
     }
     cmd.stdin(if plan.stdin_file.is_some() { Stdio::piped() } else { Stdio::null() });
     let mut child = cmd.spawn().map_err(|e| format!("Falha ao iniciar {}: {e}", program.display()))?;
