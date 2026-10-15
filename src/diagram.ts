@@ -552,7 +552,7 @@ export function createDiagramTab(conn: ConnConfig, db: string, schema: string, o
     const tx = -b.minX + pad;
     const ty = -b.minY + pad;
     const out: string[] = [];
-    out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Inter, -apple-system, Segoe UI, sans-serif" font-size="12">`);
+    out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Figtree, -apple-system, Segoe UI, sans-serif" font-size="12">`);
     out.push(`<rect width="100%" height="100%" fill="${v("--dg-bg-solid")}"/>`);
     out.push(`<g transform="translate(${tx},${ty})" fill="none" stroke="${v("--dg-edge")}" stroke-width="1.4">`);
     for (const f of info.fks) {

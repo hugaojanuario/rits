@@ -16,6 +16,12 @@ const BLUE = "#548AF7";
 const custom: Record<string, string> = {
   // Rits mark (assets/logo.svg): a solid, slanted "R" in lilac on the dark rounded square.
   logo: `<svg viewBox="0 0 32 32" width="20" height="20"><rect width="32" height="32" rx="8" fill="#111214"/><path transform="translate(16 16) scale(0.088) translate(-193 -184.5)" d="M111 74L275 100V218L229 211L268 295L229 289L188.5 201.8L158 197V275L111 268ZM159 126L217 135V170L159 161Z" fill="#A08CFF" fill-rule="evenodd"/></svg>`,
+  // Rits mark on the accent (Blocos title bar and welcome screen): follows the theme through CSS variables.
+  logoAccent: `<svg viewBox="0 0 32 32" width="22" height="22"><rect width="32" height="32" rx="9" fill="var(--accent)"/><path transform="translate(16 16) scale(0.082) translate(-193 -184.5)" d="M111 74L275 100V218L229 211L268 295L229 289L188.5 201.8L158 197V275L111 268ZM159 126L217 135V170L159 161Z" fill="var(--on-accent)" fill-rule="evenodd"/></svg>`,
+  // Layout toggles (title bar): left card, bottom card, right card.
+  panelLeft: C(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/><path d="M3.3 5.2h1M3.3 7.2h1"/>`),
+  panelBottom: C(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M1.5 9.5h13"/>`),
+  panelRight: C(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/><path d="M11.7 5.2h1M11.7 7.2h1"/>`),
   branch: C(`<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 2.5-2 3.2-4.5 3.6-1.2.2-2.2.6-2.5 1.4"/>`),
   database: C(`<ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/>`),
   databaseTw: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.1"><ellipse cx="10" cy="4.5" rx="6.5" ry="2.5"/><path d="M3.5 4.5v11c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-11M3.5 10c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg>`,
@@ -49,10 +55,10 @@ const custom: Record<string, string> = {
   plug: C(`<path d="M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3"/>`),
   unplug: C(`<path d="M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3M2 14L14 2"/>`),
   value: C(`<path d="M2.5 3.5h11v9h-11z"/><path d="M5 6.5h6M5 9.5h3.5"/>`),
-  goFile: `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.5" fill="#00ADD8"/><text x="8" y="10.9" text-anchor="middle" font-family="Inter,Segoe UI,sans-serif" font-weight="800" font-size="7" fill="#fff">GO</text></svg>`,
-  goMod: `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.5" fill="none" stroke="#00ADD8"/><text x="8" y="10.6" text-anchor="middle" font-family="Inter,Segoe UI,sans-serif" font-weight="800" font-size="6.5" fill="#00ADD8">GO</text></svg>`,
-  goSdk: `<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="#00ADD8"/><text x="8" y="10.6" text-anchor="middle" font-family="Inter,Segoe UI,sans-serif" font-weight="800" font-size="6.5" fill="#fff">Go</text></svg>`,
-  goTw: `<svg width="20" height="20" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.5" fill="none" stroke="currentColor"/><text x="8" y="10.6" text-anchor="middle" font-family="Inter,Segoe UI,sans-serif" font-weight="800" font-size="6.5" fill="currentColor">GO</text></svg>`,
+  goFile: `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.5" fill="#00ADD8"/><text x="8" y="10.9" text-anchor="middle" font-family="Figtree,Segoe UI,sans-serif" font-weight="800" font-size="7" fill="#fff">GO</text></svg>`,
+  goMod: `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.5" fill="none" stroke="#00ADD8"/><text x="8" y="10.6" text-anchor="middle" font-family="Figtree,Segoe UI,sans-serif" font-weight="800" font-size="6.5" fill="#00ADD8">GO</text></svg>`,
+  goSdk: `<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="#00ADD8"/><text x="8" y="10.6" text-anchor="middle" font-family="Figtree,Segoe UI,sans-serif" font-weight="800" font-size="6.5" fill="#fff">Go</text></svg>`,
+  goTw: `<svg width="20" height="20" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.5" fill="none" stroke="currentColor"/><text x="8" y="10.6" text-anchor="middle" font-family="Figtree,Segoe UI,sans-serif" font-weight="800" font-size="6.5" fill="currentColor">GO</text></svg>`,
   minimize: `<svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg>`,
   maximize: `<svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor"/></svg>`,
   restoreWin: `<svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y="2.5" width="7" height="7" fill="none" stroke="currentColor"/><path d="M2.5 2.5V.5h7v7h-2" fill="none" stroke="currentColor"/></svg>`,

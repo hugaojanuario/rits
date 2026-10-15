@@ -8,7 +8,7 @@ Este arquivo explica **o que é o projeto, como ele está organizado, como rodar
 
 Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados**, infraestrutura (Docker, Terraform, Kubernetes) e orquestração (Apache Airflow, como plugin). Roda no Windows 11 e no macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
 
-- **Visual**: copia o *layout* e o *look* das IDEs JetBrains com o tema **Islands** (Dark/Light): barra principal com widget de projeto, widget de branch e widget de execução, faixas de tool windows nas laterais, painéis em "ilhas" arredondadas e barra de status com breadcrumbs.
+- **Visual**: layout próprio **Blocos** (temas Rits Escuro/Claro): barra de título com o logo (menu principal), as abas do editor, o widget de execução e botões de layout; tool windows em **cartões** arredondados (esquerdo, direito e inferior) com um seletor segmentado; uma aba fixa "Início" com a tela de início do projeto e a barra de comando; barra de status discreta. O acento é o lilás do logo (`#A08CFF`; `#6B55E0` no tema claro).
 - **Código**: editor CodeMirror 6 com servidores de linguagem (LSP), execução, testes, depuração (DAP), terminal real (PTY), Git e navegação no estilo IntelliJ.
 - **Banco de dados**: explorador de conexões, console SQL, editor de dados, DDL, diagrama ER, exportação e backup/restore com as ferramentas nativas (`pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`), no estilo do DBeaver. PostgreSQL e MySQL/MariaDB têm driver embutido; SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse e MongoDB baixam o driver na primeira conexão (seção 5.7).
 - **Leve**: Tauri 2 com o WebView do sistema (WebView2 no Windows, WKWebView no macOS), sem Chromium embutido. O instalador NSIS tem cerca de 3,5 MB, o exe cerca de 7 MB, o `Rits.app` cerca de 7,6 MB, e o processo principal usa cerca de 30 MB de RAM.
@@ -17,9 +17,9 @@ Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, *
 A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos visíveis ao usuário em pt-BR, e comentários de código e identificadores em inglês, como no resto do código.
 
 ### Restrições legais (importante)
-- Os ícones em `src/assets/icons/` e as cores dos temas vêm do **IntelliJ Community** (Apache 2.0). Mantenha `LICENSE-intellij-community.txt` e `NOTICE-intellij-community.txt` nessa pasta. Para ícones novos, use **somente** os do repositório `JetBrains/intellij-community` (pasta `platform/icons/src/expui` e afins) ou desenhe um próprio no mesmo estilo.
+- Os ícones em `src/assets/icons/` e as cores de sintaxe (`--syn-*`) vêm do **IntelliJ Community** (Apache 2.0). Mantenha `LICENSE-intellij-community.txt` e `NOTICE-intellij-community.txt` nessa pasta. Para ícones novos, use **somente** os do repositório `JetBrains/intellij-community` (pasta `platform/icons/src/expui` e afins) ou desenhe um próprio no mesmo estilo.
 - **Nunca** copie código, binários, ícones de produto ou logos do DataGrip, PyCharm, GoLand ou de outros produtos JetBrains (são proprietários e marcas registradas). O nome e o logo do Rits são próprios: não imite o estilo de logo dos produtos JetBrains (quadrado preto com letras sobre degradê).
-- Fontes: Inter e JetBrains Mono (SIL OFL), via `@fontsource`.
+- Fontes: Figtree (interface) e JetBrains Mono (código), SIL OFL, via `@fontsource`.
 
 ---
 
@@ -65,7 +65,7 @@ O que é específico do macOS:
 - **Processos**: no Unix, `hidden()` põe cada filho no próprio grupo (`process_group(0)`), e `kill_tree` mata o grupo (`kill -9 -- -<pid>`).
 - **Frontend**: `IS_WIN`/`IS_MAC`/`EXE`/`INSTALL`/`REVEAL_LABEL` em `host.ts`. `P.win()` só converte para `\` no Windows (no resto devolve o caminho igual), então continue usando-o para caminhos passados a processos. Use `P.isAbs()` em vez de testar `C:/`. O venv usa `bin/python` (e `scriptsDir()` é a própria pasta `bin`).
 - **Atalhos**: os atalhos globais aceitam Ctrl **ou** Cmd, e o keymap do editor usa `Mod-` (Cmd no macOS). Os rótulos dos menus ainda mostram "Ctrl".
-- **Liquid Glass**: a janela é transparente (`transparent`, `macOSPrivateApi` e a feature `macos-private-api` do `tauri`, só no alvo macOS no `Cargo.toml`) e usa `windowEffects` `liquidGlassRegular` (macOS 26), com fallback para `underWindowBackground`. Com a classe `glass` no `<html>` (padrão no Mac; interruptor em Configurações › Aparência; `localStorage` `glass`), a seção "Liquid Glass" no fim do `styles.css` redefine os tokens com cores translúcidas: superfícies de "frame" transparentes, ilhas com `--rim`/`--sheen` e popups com `backdrop-filter`. As cores dessa seção são as cores de sistema da Apple, não as do IntelliJ. O `setTheme()` do `main.ts` também chama `getCurrentWindow().setTheme()` para o vidro nativo acompanhar o tema (permissão `core:window:allow-set-theme`). Componente novo: use os tokens e confira com o vidro ligado e desligado.
+- **Liquid Glass**: a janela é transparente (`transparent`, `macOSPrivateApi` e a feature `macos-private-api` do `tauri`, só no alvo macOS no `Cargo.toml`) e usa `windowEffects` `liquidGlassRegular` (macOS 26), com fallback para `underWindowBackground`. Com a classe `glass` no `<html>` (padrão no Mac; interruptor em Configurações › Aparência; `localStorage` `glass`), a seção "Liquid Glass" no fim do `styles.css` redefine os tokens com cores translúcidas: superfícies de "frame" transparentes, cartões com `--rim`/`--sheen` e popups com `backdrop-filter`. Rótulos e separadores seguem as cores de sistema da Apple; o acento é o mesmo lilás dos temas opacos, e o texto sobre ele usa `--on-accent`. O `setTheme()` do `main.ts` também chama `getCurrentWindow().setTheme()` para o vidro nativo acompanhar o tema (permissão `core:window:allow-set-theme`). Componente novo: use os tokens e confira com o vidro ligado e desligado.
 - **Banco**: `tools.rs` procura `pg_dump`/`mysqldump` em `/opt/homebrew/opt/{postgresql@*,libpq,mysql*,mariadb*}/bin`, no Postgres.app e em `/Library/PostgreSQL`.
 
 ### Testes de integração (`--ignored`)
@@ -107,7 +107,7 @@ O app real só roda dentro do Tauri, porque o `invoke` não existe num navegador
 - **Roteiro temporário dentro do app real**: um módulo de teste carregado por `import()` no `main.ts` só quando uma variável `VITE_*` estiver definida, que recebe o `Workbench`, executa o fluxo e grava o resultado num arquivo com `host.write`. É o único jeito de exercitar Keychain, processos e janelas Tauri de verdade. **Apague o módulo e o gancho no `main.ts` antes de commitar.**
 - **Interface num navegador headless** (Chrome/Brave com `--remote-debugging-port`) servida pelo Vite, com o `invoke` substituído por chamadas a um serviço real (por exemplo, um proxy para o Airflow). Serve para validar telas contra dados reais, não o backend Rust.
 
-`dev/mock.html` com `dev/tauri-mock.ts` simula **só a parte de banco** num navegador comum, para mexer em CSS. Os comandos da IDE não são simulados, então a parte de código não funciona ali.
+`dev/mock.html` com `dev/tauri-mock.ts` simula **só a parte de banco** num navegador comum, para mexer em CSS. `dev/ide-mock.html` com `dev/ide-mock.ts` simula a **janela da IDE** (projeto, árvore, Git e leitura de arquivos fictícios; sem processos, LSP nem terminal), em Windows ou macOS (`?os=mac`).
 
 ---
 
@@ -117,7 +117,7 @@ O app real só roda dentro do Tauri, porque o `invoke` não existe num navegador
 index.html                 ponto de entrada do Vite (carrega src/main.ts e src/styles.css)
 src/
   main.ts                  boot: tema, fontes, window_reset, tela de boas-vindas ou Workbench
-  styles.css               TODO o CSS (tokens dos temas Islands no topo, depois componentes)
+  styles.css               TODO o CSS (tokens dos temas Rits Escuro/Claro no topo, depois componentes; Liquid Glass no fim)
   icons.ts                 ícones: SVGs do expui (import.meta.glob) + ícones próprios; ícones por tipo de arquivo
   ui.ts                    primitivas: modal, confirm/prompt, contextMenu, dropdown, popupList, toast, notify, splitter
   util.ts                  h() (hyperscript), uid, debounce, quoteIdent/quoteLiteral, splitSql, formatação
@@ -139,10 +139,10 @@ src/
   # ---- IDE de código ----
   ide/
     host.ts                wrappers dos comandos da IDE, fan-out de eventos (on), helpers de caminho (P)
-    workbench.ts           a janela: barra principal, faixas, ilhas, tool windows, status bar, atalhos globais, troca de projeto
+    workbench.ts           a janela: barra de título com as abas, cartões com seletor de tool windows, tela de início do projeto e barra de comando, status bar, atalhos globais, troca de projeto
     project.ts             projetos recentes, cor e iniciais do badge, ProjectSettings e RunConfig
     editors.ts             CodeEditor (CodeMirror + LSP + breakpoints + marcadores de execução + gutter do Git + auto-save) e o gerenciador Editors
-    lang.ts                tema e highlight do editor (Islands) e mapa extensão → linguagem
+    lang.ts                tema e highlight do editor (cores de sintaxe do Islands) e mapa extensão → linguagem
     lsp.ts                 LspManager: um cliente LSP por linguagem; intercepta pedidos servidor→cliente; diagnósticos
     sdk.ts                 detecção de interpretadores Python e do Go; PLUGINS (componentes e instaladores); runBackground
     projectView.ts         tool window Projeto (árvore de arquivos)
@@ -185,7 +185,7 @@ assets/logo-mark.svg       só a marca, sem fundo: um "R" sólido e inclinado, l
                            e apague as pastas android/ e ios/ que o comando cria (o app é só desktop);
                            a versão de 20 px usada na interface é o "logo" em src/icons.ts
 README.md / README.en.md   documentação para o usuário em pt-BR (principal) e em inglês: mantenha as duas em sincronia
-dev/                       mock de navegador (só banco)
+dev/                       mocks de navegador: banco (mock.html) e janela da IDE (ide-mock.html)
 ```
 
 ---
@@ -214,11 +214,13 @@ O `host.ts` registra **um** listener Tauri por evento e distribui por `id` com `
 4. liga o watcher e restaura o layout e os arquivos abertos;
 5. instala os atalhos globais (fase de captura do `keydown`).
 
-**Tool windows**: `wb.register({id, title, icon, anchor: "left"|"right"|"bottom", shortcut, body, headerTabs?, actions?, onShow?})`. Há uma visível por lado (`show`, `hide`, `toggle`, `isVisible`). O cabeçalho é refeito por `refreshHeader(id)`, e `setBadge(id, bool)` acende o ponto vermelho na faixa. O nome do ícone é o arquivo em `assets/icons/toolwindows/<nome>@20x20.svg` (ou um ícone próprio do `icons.ts`).
+**Tool windows**: `wb.register({id, title, icon, anchor: "left"|"right"|"bottom", shortcut, body, headerTabs?, actions?, onShow?})`. Há uma visível por lado (`show`, `hide`, `toggle`, `isVisible`). O cabeçalho do cartão (seletor segmentado + `actions` + menu ⋮, e `headerTabs` numa segunda linha nos cartões laterais) é refeito por `refreshHeader(id)`, e `setBadge(id, bool)` acende o ponto vermelho no segmento e, com o painel oculto, no botão de layout da barra de título. O nome do ícone é o arquivo em `assets/icons/toolwindows/<nome>@20x20.svg` (ou um ícone próprio do `icons.ts`).
 
-IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, direita), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12), `docker` (só com o plugin, embaixo à direita) e `airflow` (só com o plugin, à direita).
+IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, esquerda), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12), `docker` (só com o plugin, embaixo à direita) e `airflow` (só com o plugin, à direita).
 
-**Posição das tool windows**: os botões das faixas podem ser arrastados (`stripeDrag`/`stripeDropAt`) para quatro zonas: topo da esquerda, topo da direita e os grupos de baixo de cada faixa (`anchor: "bottom"` com `side`). A ordem fica em `order`. A posição é salva no `localStorage` `toolLayout` (global, vale para todos os projetos) e aplicada no `register()`. O menu ⋮ de cada janela tem "Mover para…" e "Restaurar layout padrão". `unregister(id)` remove uma janela (usado pelos plugins opcionais).
+**Posição das tool windows**: cada janela fica num dos três cartões (`anchor`: `left`, `right` ou `bottom`); a ordem no seletor vem de `order`. O menu ⋮ tem "Mover para o painel esquerdo/inferior/direito", "Restaurar layout padrão" e "Ocultar". A posição é salva no `localStorage` `toolLayout` (global, vale para todos os projetos) e aplicada no `register()`. Padrão: Projeto, Database, Commit e Estrutura à esquerda; Airflow à direita; o resto embaixo. Os botões de layout da barra de título (`layoutBtns`) chamam `toggleSide()`; com o cartão esquerdo oculto, um botão do projeto aparece na barra de título (`.left-hidden`).
+
+**Tela de início ("Início")**: a primeira aba é fixa (`TabManager` com `home`; `showHome()`), e mostra `renderHome()`: título e chips do projeto, "Comece por aqui", "No projeto" (`detectProject()` procura Compose, Dockerfile, `*.tf`, `tests/`, `go.mod` e `pyproject.toml` na raiz e reaproveita as ações de `infra.ts` e `runner.runTestsIn()`), Executar e a barra de comando (`commandBar()`: Enter busca com `searchEverywhere(wb, tab, query)` ou roda no Terminal com `terminals.newTab(root, cmd)`; Tab alterna o modo). Sem `activeFile` salvo, o projeto abre nessa aba. `unregister(id)` remove uma janela (usado pelos plugins opcionais).
 
 **Keymaps** (`keymap.ts`): `keymapId()` é `"vscode"` (padrão no macOS) ou `"jetbrains"` (padrão no Windows), no `localStorage` `keymap`. Os menus continuam escritos com rótulos JetBrains ("Ctrl" = ⌘ no Mac); `displayShortcut()` traduz para o keymap ativo e desenha ⌃⌥⇧⌘ no macOS (o `ui.ts` aplica isso em `contextMenu` e `popupList`). No modo VS Code, `Workbench.vscodeKey()` trata os atalhos globais antes dos JetBrains (incluindo o acorde ⌘K). Os do editor ficam em `CodeEditor.keymap()`, embrulhados em `jb()`/`vs()`, que checam o keymap na hora da tecla. Atalho novo: inclua nos dois keymaps e no `VS`/`keymapTable()`. Para letras use `e.code` (o Option do Mac altera o `e.key`).
 
@@ -292,8 +294,8 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 
 **Frontend**
 - Monte DOM com `h("tag.classe", {atributos, onclick}, ...filhos)` de `util.ts`. Filhos `null`, `undefined` ou `false` são ignorados **no `h()`**, mas `replaceChildren()` **não** aceita `null`: use `""`.
-- Ícones: `icon("pasta/nome")` (caminho dentro de `assets/icons`, sem `.svg`) ou um nome próprio de `icons.ts`. A variante `_dark` é escolhida sozinha e `setIconTheme()` atualiza os ícones ao trocar de tema. Para ícones de arquivo use `fileIcon(nome)`/`fileIconName(nome)`; para as faixas, `twIcon(nome)`.
-- **Cores só por variáveis CSS** do topo de `styles.css` (`--frame`, `--island`, `--fg`, `--accent`, `--sel`, `--syn-*`…). Nunca coloque cor fixa num componente; os dois temas precisam continuar funcionando. Os valores vêm dos temas oficiais `ManyIslandsDark/Light` e do esquema `IslandSchemeDark`; consulte o intellij-community antes de "inventar" uma cor.
+- Ícones: `icon("pasta/nome")` (caminho dentro de `assets/icons`, sem `.svg`) ou um nome próprio de `icons.ts`. A variante `_dark` é escolhida sozinha e `setIconTheme()` atualiza os ícones ao trocar de tema. Para ícones de arquivo use `fileIcon(nome)`/`fileIconName(nome)`; para as tool windows, `twIcon(nome)`.
+- **Cores só por variáveis CSS** do topo de `styles.css` (`--frame`, `--island`, `--card-border`, `--fg`, `--accent`, `--on-accent`, `--sel`, `--syn-*`…). Nunca coloque cor fixa num componente; os dois temas (e o vidro) precisam continuar funcionando. Texto ou ícone sobre um fundo `--accent` usa `--on-accent` / `filter: var(--on-accent-icon)`, nunca `#fff`: o lilás do tema escuro é claro. Texto fica acima de 4,5:1 nos dois temas. As cores de sintaxe ainda vêm do esquema `IslandSchemeDark` do intellij-community.
 - Popups e menus: `contextMenu`, `dropdown` e `popupList` (com busca, seções e submenus via `children`). Para diálogos, use `modal` com `button`; para avisos, `toast` ou `notify` (com ações).
 - Caminhos: **sempre** com barras `/` e normalizados por `P.norm()`. Compare com `P.same()`/`P.inside()` (sem diferenciar maiúsculas). Para o Windows (Explorer, argumentos que o usuário vê) use `P.win()`; para LSP, `P.uri()`/`P.fromUri()` (`file:///C:/...`).
 - Textos de interface em **pt-BR** e atalhos nos keymaps **JetBrains** e **VS Code** (`keymap.ts`; veja 5.3). Atalho novo: registre em `Workbench.installKeys()`/`vscodeKey()` (global) ou no `keymap()` do `CodeEditor` (editor), e atualize as tabelas em `keymap.ts`.
@@ -323,7 +325,7 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 
 **Adicionar uma ação**: inclua em `actions()` de `search.ts` (para aparecer em Ctrl+Shift+A e no Shift duplo) e, se couber, no `mainMenu()` de `workbench.ts`.
 
-**Mudar o visual**: ajuste os tokens no topo de `styles.css` para os **dois** temas e confira no app real (seção 3) com Islands Dark e Islands Light.
+**Mudar o visual**: ajuste os tokens no topo de `styles.css` para os **dois** temas (e a seção Liquid Glass, se o token existir lá) e confira no app real (seção 3) com Rits Escuro e Rits Claro. Para mexer em CSS sem o Tauri, `npm run dev` e abra `/dev/ide-mock.html` (janela da IDE com um projeto fictício; `?os=mac` simula o macOS com o vidro sobre um papel de parede, `?theme=light`, `?glass=0`, `?welcome=1`).
 
 ---
 

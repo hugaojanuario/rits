@@ -101,7 +101,8 @@ function actions(wb: Workbench): { label: string; icon: string; run: () => void;
   ];
 }
 
-export async function searchEverywhere(wb: Workbench, tab: "all" | "files" | "symbols" | "actions" = "all") {
+/** `query` pre-fills the input (the home page command bar sends what was typed there). */
+export async function searchEverywhere(wb: Workbench, tab: "all" | "files" | "symbols" | "actions" = "all", query = "") {
   closePopup();
   document.querySelector(".se-overlay")?.remove();
   const input = h("input.se-input", { placeholder: "Digite / para ações, # para símbolos…", spellcheck: false }) as HTMLInputElement;
@@ -204,6 +205,7 @@ export async function searchEverywhere(wb: Workbench, tab: "all" | "files" | "sy
       update();
     }
   });
+  input.value = query;
   update();
   input.focus();
 }

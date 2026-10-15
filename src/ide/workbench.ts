@@ -1,11 +1,13 @@
-// The IDE window: main toolbar, tool window stripes, islands (tool windows + editor), status bar.
+// The IDE window ("Blocos" layout): title bar with the editor tabs, cards (tool windows + editor) with a
+// segmented tool window switcher, the project home page with its command bar, and a slim footer.
 import { Effect, EffectState, getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { h, uid } from "../util";
-import { icon, twIcon } from "../icons";
+import { fileIcon, icon, twIcon } from "../icons";
 import { TabManager } from "../tabs";
 import { closeMenus, contextMenu, modal, button, popupList, toast, type MenuItem, type PopupItem } from "../ui";
+import { infraActions } from "./infra";
 import { host, IS_MAC, onFsChange, P, type EnvInfo } from "./host";
 import { displayShortcut, keymapId } from "./keymap";
 import { loadProjectSettings, projectBadge, recentProjects, saveProjectSettings, touchRecent, type ProjectSettings } from "./project";
@@ -27,8 +29,17 @@ import { openSettings } from "./settings";
 import { openCloneDialog, openNewProjectDialog } from "./welcome";
 
 export type Anchor = "left" | "right" | "bottom";
-/** A place on the stripes: top of a side stripe, or the bottom group of a side stripe (bottom anchor). */
+/** Where a tool window lives: a side card, or the bottom card (remembering its old stripe side). */
 type StripeZone = "left" | "right" | "bottom-left" | "bottom-right";
+/** Something the project home page found in the project root (compose file, Dockerfile, tests…). */
+interface Found {
+  name: string;
+  path: string;
+  dir: boolean;
+  sub: string;
+  icon: HTMLElement;
+  action?: { label: string; run: () => void };
+}
 interface Placement {
   anchor: Anchor;
   side?: "left" | "right";
@@ -87,10 +98,6 @@ export class Workbench {
   private visible: Partial<Record<Anchor, string>> = {};
   private islands: Record<Anchor, HTMLElement>;
   private splitters: Record<Anchor, HTMLElement>;
-  private stripeLeft = h("div.stripe");
-  private stripeRight = h("div.stripe");
-  private stripeZones: Record<StripeZone, { tw: ToolWindow; el: HTMLElement }[]> = { left: [], right: [], "bottom-left": [], "bottom-right": [] };
-  private suppressStripeClick = false;
   private defaultPlacement = new Map<string, Placement>();
   /** Last tool window shown on each side, for the "toggle sidebar/panel" shortcuts. */
   private lastVisible: Partial<Record<Anchor, string>> = {};
@@ -100,30 +107,30 @@ export class Workbench {
   private statusRight = h("div.status-item");
   private statusProgress = h("div.sb-progress.hidden");
   private progressByKey = new Map<string, string>();
-  readonly vcsBtn = h("button.tb-btn.vcs");
+  readonly vcsBtn = h("button.cp-branch");
+  /** Project home: the pinned first tab ("Início"), shown when no tab is active. */
+  private home = h("div.home");
+  private found: Found[] = [];
+  /** Built once, so a re-render of the home page keeps what is being typed in it. */
+  private cmdBar: HTMLElement | null = null;
+  private cmdChips = h("div.cmd-chips");
+  /** Title bar buttons that show or hide each card (and carry a dot when a hidden tool window has news). */
+  private layoutBtns: Record<Anchor, HTMLElement> = {
+    left: h("button.tb-btn.tb-layout", { title: "Painel esquerdo", "aria-label": "Painel esquerdo", onclick: () => this.toggleSide("left", "project") }, icon("panelLeft")),
+    bottom: h("button.tb-btn.tb-layout", { title: "Painel inferior", "aria-label": "Painel inferior", onclick: () => this.toggleSide("bottom", "terminal") }, icon("panelBottom")),
+    right: h("button.tb-btn.tb-layout", { title: "Painel direito", "aria-label": "Painel direito", onclick: () => this.toggleSide("right", "airflow") }, icon("panelRight")),
+  };
   readonly runWidget = h("div.run-widget");
   private lspLog: string[] = [];
 
   constructor(root: string) {
     this.root = P.norm(root);
     this.name = P.base(this.root);
-    const empty = h(
-      "div.editor-empty",
-      null,
-      ...[
-        ["Buscar em tudo", "Shift duplo"],
-        ["Ir para arquivo", "Ctrl+Shift+N"],
-        ["Arquivos recentes", "Ctrl+E"],
-        ["Barra de navegação", "Alt+Home"],
-        ["Executar", "Shift+F10"],
-        ["Solte arquivos aqui para abrir", ""],
-      ].map(([a, b]) => h("div.wk", null, h("span", null, a), h("kbd", { "data-jb": b }, displayShortcut(b) || b))),
-    );
     window.addEventListener("rits-keymap", () => {
-      empty.querySelectorAll<HTMLElement>("kbd[data-jb]").forEach((k) => (k.textContent = displayShortcut(k.dataset.jb) || k.dataset.jb!));
-      this.renderStripes();
+      if (this.editors) this.renderHome();
+      this.renderChrome();
     });
-    this.tabs = new TabManager(empty);
+    this.tabs = new TabManager(this.home, { title: "Início do projeto", icon: "nodes/homeFolder" });
     this.lsp = new LspManager(this.root, {
       openFile: async (path) => (await this.editors.openFile(path))?.view ?? null,
       progress: (lang, title) => this.setProgress("lsp-" + lang, title ? `${LSP_LANG_LABEL[lang]}: ${title}` : null),
@@ -133,7 +140,7 @@ export class Workbench {
       },
       missing: (lang) => this.pluginMissing(lang),
     });
-    this.editorIsland = h("div.island.editor-island", null, this.tabs.bar, this.tabs.content);
+    this.editorIsland = h("div.island.editor-island", null, this.tabs.content);
     this.islands = {
       left: h("div.island.side.hidden", { style: "width:300px" }),
       right: h("div.island.side.hidden", { style: "width:340px" }),
@@ -153,9 +160,9 @@ export class Workbench {
     this.settings = await loadProjectSettings(this.root);
     const center = h("div.ws-col", { style: "flex:1;min-width:0;display:flex;flex-direction:column" }, this.editorIsland, this.splitters.bottom, this.islands.bottom);
     const row = h("div.ws-row", null, this.islands.left, this.splitters.left, center, this.splitters.right, this.islands.right);
-    const workspace = h("div.workspace", { style: "padding-bottom:0" }, row);
+    const workspace = h("div.workspace", null, row);
     const statusbar = h("div.statusbar", null, this.statusLeft, h("span.grow"), this.statusProgress, this.statusRight);
-    app.replaceChildren(this.toolbar, h("div.ide-body", null, this.stripeLeft, workspace, this.stripeRight), statusbar);
+    app.replaceChildren(this.toolbar, h("div.ide-body", null, workspace), statusbar);
     this.initSplitters();
 
     this.python = await resolveInterpreter(this.root, this.settings.pythonInterpreter);
@@ -175,8 +182,11 @@ export class Workbench {
     window.addEventListener("storage", (e) => e.key?.startsWith("plugin.") && this.syncPlugins());
 
     this.renderToolbar();
-    this.renderStripes();
+    this.renderChrome();
+    this.renderHome();
+    this.detectProject();
     this.tabs.onChange = () => {
+      if (!this.tabs.active) this.renderHome();
       this.renderStatus();
       this.updateTitle();
       this.persistOpenFiles();
@@ -191,6 +201,7 @@ export class Workbench {
     onFsChange((root, paths) => {
       if (!P.same(root, this.root)) return;
       this.projectView.onFsChange(paths);
+      if (paths.some((p) => P.same(P.dir(p), this.root))) this.detectProject();
       this.editors.onFsChange(paths);
       this.git.onFsChange(paths);
       this.lsp.notifyWatched(paths.filter((p) => /\.(py|go|mod|toml|cfg|json)$/i.test(p)));
@@ -198,28 +209,21 @@ export class Workbench {
 
     // restore layout and files
     const lay = (this.settings.layout ?? {}) as Partial<Record<Anchor, string>>;
-    this.show(lay.left ?? "project");
-    if (lay.bottom) this.show(lay.bottom);
-    if (lay.right) this.show(lay.right);
+    // A tool window saved on one side may live elsewhere now (Database moved to the left card).
+    const at = (a: Anchor) => (lay[a] && this.toolWindows.get(lay[a]!)?.anchor === a ? lay[a] : undefined);
+    this.show(at("left") ?? "project");
+    if (at("bottom")) this.show(at("bottom")!);
+    if (at("right")) this.show(at("right")!);
     for (const f of this.settings.openFiles ?? []) if (await host.exists(f)) await this.editors.openFile(f, { background: true });
+    // No active file = the project home ("Início") was in front.
     if (this.settings.activeFile) await this.editors.openFile(this.settings.activeFile);
-    else if (!this.tabs.tabs.length) await this.openDefaultFile();
+    else this.tabs.showHome();
 
     this.installKeys();
     this.renderStatus();
     this.updateTitle();
     touchRecent(this.root, this.git.branch ?? undefined);
     window.addEventListener("beforeunload", () => this.persistOpenFiles());
-  }
-
-  private async openDefaultFile() {
-    for (const f of ["README.md", "main.py", "main.go", "app.py", "cmd/main.go"]) {
-      const p = P.join(this.root, f);
-      if (await host.exists(p)) {
-        await this.editors.openFile(p);
-        return;
-      }
-    }
   }
 
   /** Optional plugins (Docker) add or remove their tool windows when enabled in Settings › Plugins. */
@@ -271,7 +275,7 @@ export class Workbench {
     const saved = loadToolLayout()[tw.id];
     if (saved) Object.assign(tw, { anchor: saved.anchor, side: saved.side, order: saved.order });
     this.toolWindows.set(tw.id, tw);
-    this.renderStripes();
+    this.renderChrome();
   }
 
   unregister(id: string) {
@@ -279,7 +283,7 @@ export class Workbench {
     if (!tw) return;
     if (this.visible[tw.anchor] === id) this.hide(tw.anchor);
     this.toolWindows.delete(id);
-    this.renderStripes();
+    this.renderChrome();
   }
 
   private saveToolLayout() {
@@ -307,76 +311,7 @@ export class Workbench {
     members.forEach((t, i) => (t.order = (i + 1) * 10));
     this.saveToolLayout();
     if (wasVisible) this.show(tw.id);
-    else this.renderStripes();
-  }
-
-  /** Drag a stripe button to reorder it or move it to another stripe (JetBrains-style). */
-  private stripeDrag(tw: ToolWindow, btn: HTMLElement, e: PointerEvent) {
-    if (e.button !== 0) return;
-    const sx = e.clientX;
-    const sy = e.clientY;
-    let ghost: HTMLElement | null = null;
-    let drop: { zone: StripeZone; index: number } | null = null;
-    const marker = h("div.stripe-drop");
-    const move = (ev: PointerEvent) => {
-      if (!ghost) {
-        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
-        ghost = btn.cloneNode(true) as HTMLElement;
-        ghost.classList.add("stripe-ghost");
-        document.body.append(ghost, marker);
-        btn.classList.add("dragging");
-        document.body.classList.add("stripe-dragging");
-        closeMenus();
-      }
-      ghost.style.transform = `translate(${ev.clientX - 17}px, ${ev.clientY - 17}px)`;
-      drop = this.stripeDropAt(ev.clientX, ev.clientY, tw, marker);
-    };
-    const up = () => {
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", up);
-      if (!ghost) return;
-      ghost.remove();
-      marker.remove();
-      btn.classList.remove("dragging");
-      document.body.classList.remove("stripe-dragging");
-      this.suppressStripeClick = true;
-      setTimeout(() => (this.suppressStripeClick = false));
-      if (drop) this.placeToolWindow(tw, drop.zone, drop.index);
-    };
-    document.addEventListener("pointermove", move);
-    document.addEventListener("pointerup", up);
-  }
-
-  /** Finds the zone and index under the pointer and positions the insertion marker. */
-  private stripeDropAt(x: number, y: number, dragged: ToolWindow, marker: HTMLElement): { zone: StripeZone; index: number } | null {
-    const stripes = [
-      { side: "left" as const, el: this.stripeLeft },
-      { side: "right" as const, el: this.stripeRight },
-    ];
-    const near = stripes
-      .map((s) => ({ ...s, r: s.el.getBoundingClientRect() }))
-      .map((s) => ({ ...s, d: x < s.r.left ? s.r.left - x : x > s.r.right ? x - s.r.right : 0 }))
-      .sort((a, b) => a.d - b.d)[0];
-    if (!near || near.d > 140) {
-      marker.style.display = "none";
-      return null;
-    }
-    const spacer = near.el.querySelector<HTMLElement>(".grow")?.getBoundingClientRect();
-    const bottomGroup = spacer ? y > spacer.top + spacer.height / 2 : false;
-    const zone: StripeZone = bottomGroup ? (near.side === "left" ? "bottom-left" : "bottom-right") : near.side;
-    const items = this.stripeZones[zone].filter((z) => z.tw !== dragged);
-    let index = items.findIndex((z) => {
-      const r = z.el.getBoundingClientRect();
-      return y < r.top + r.height / 2;
-    });
-    if (index < 0) index = items.length;
-    let top: number;
-    if (index < items.length) top = items[index].el.getBoundingClientRect().top - 3;
-    else if (items.length) top = items[items.length - 1].el.getBoundingClientRect().bottom + 1;
-    else if (bottomGroup && spacer) top = spacer.bottom - 6;
-    else top = near.r.top + 4;
-    Object.assign(marker.style, { display: "block", left: near.r.left + 7 + "px", width: near.r.width - 14 + "px", top: top + "px" });
-    return { zone, index };
+    else this.renderChrome();
   }
 
   isVisible(id: string) {
@@ -389,7 +324,7 @@ export class Workbench {
     if (!tw) return;
     this.visible[tw.anchor] = id;
     this.renderIsland(tw.anchor);
-    this.renderStripes();
+    this.renderChrome();
     tw.onShow?.();
     if (focus) setTimeout(() => (tw.body.querySelector<HTMLElement>("[tabindex], input, textarea, .tree") ?? tw.body).focus());
     this.persistOpenFiles();
@@ -399,7 +334,7 @@ export class Workbench {
     if (this.visible[anchor]) this.lastVisible[anchor] = this.visible[anchor];
     delete this.visible[anchor];
     this.renderIsland(anchor);
-    this.renderStripes();
+    this.renderChrome();
     this.persistOpenFiles();
   }
 
@@ -419,10 +354,17 @@ export class Workbench {
     const tw = this.toolWindows.get(id);
     if (tw && tw.badge !== on) {
       tw.badge = on;
-      this.renderStripes();
+      this.renderChrome();
     }
   }
 
+  /** Tool windows of a card, in their order (the bottom card holds both former bottom stripes). */
+  private zoneMembers(anchor: Anchor) {
+    return [...this.toolWindows.values()].filter((t) => t.anchor === anchor).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
+
+  /** A card: the project header (left card), a row with the segmented switcher and the tool window's
+   *  actions, its own tabs (side cards: a second row) and its body. */
   private renderIsland(anchor: Anchor, headerOnly = false) {
     const island = this.islands[anchor];
     const id = this.visible[anchor];
@@ -433,18 +375,48 @@ export class Workbench {
       island.replaceChildren();
       return;
     }
-    const header = h(
-      "div.tw-header",
-      null,
-      h("span.tw-title", null, tw.title),
-      tw.headerTabs ?? null,
-      h("span.grow"),
-      ...(tw.actions?.() ?? []),
-      h("button.icon-btn", { title: "Opções", onclick: (e: MouseEvent) => this.twMenu(tw, e) }, icon("general/moreVertical")),
-      h("button.icon-btn", { title: "Ocultar (Shift+Esc)", onclick: () => this.hide(anchor) }, icon("general/hide")),
+    const members = this.zoneMembers(anchor);
+    // The wide bottom card names every segment; a side card names only the active one.
+    const seg = h(
+      "div.seg",
+      { class: anchor === "bottom" ? "seg-labels" : "", role: "tablist", "aria-label": "Janelas de ferramentas" },
+      ...members.map((t) =>
+        h(
+          "button.seg-btn",
+          {
+            class: t === tw ? "active" : "",
+            role: "tab",
+            "aria-selected": t === tw ? "true" : "false",
+            title: t.title + (displayShortcut(t.shortcut) ? `  ${displayShortcut(t.shortcut)}` : ""),
+            onclick: () => t !== tw && this.show(t.id, true),
+          },
+          twIcon(t.icon),
+          h("span.seg-label", null, t.title),
+          t.badge ? h("span.badge-dot") : null,
+        ),
+      ),
     );
-    if (headerOnly && island.firstElementChild) island.firstElementChild.replaceWith(header);
-    else island.replaceChildren(header, tw.body);
+    const more = h("button.icon-btn", { title: "Opções", "aria-label": "Opções", onclick: (e: MouseEvent) => this.twMenu(tw, e) }, icon("general/moreVertical"));
+    const actions = tw.actions?.() ?? [];
+    const head =
+      anchor === "bottom"
+        ? h("div.card-head", null, h("div.card-row", null, seg, tw.headerTabs ? h("span.card-sep") : null, tw.headerTabs ?? null, h("span.grow"), ...actions, more))
+        : h(
+            "div.card-head",
+            null,
+            anchor === "left" ? this.projectHead() : null,
+            h("div.card-row", null, seg),
+            h("div.tw-header", null, tw.headerTabs ?? null, h("span.grow"), ...actions, more),
+          );
+    if (headerOnly && island.firstElementChild) island.firstElementChild.replaceWith(head);
+    else island.replaceChildren(head, tw.body);
+  }
+
+  /** Project identity at the top of the left card: initials, name (projects popup) and the Git branch. */
+  private projectHead() {
+    const name = h("button.cp-name", { title: P.win(this.root) }, h("span.cp-label", null, this.name), icon("general/chevronDown"));
+    name.onclick = () => this.projectPopup(name);
+    return h("div.card-project", null, projectBadge(this.name, true), h("div.cp-text", null, name, this.vcsBtn));
   }
 
   private twMenu(tw: ToolWindow, e: MouseEvent) {
@@ -452,12 +424,10 @@ export class Workbench {
       this.placeToolWindow(tw, z, Number.MAX_SAFE_INTEGER);
       this.show(tw.id);
     };
-    const zone = this.zoneOf(tw);
     contextMenu(e.clientX, e.clientY, [
-      { label: "Mover para a esquerda", disabled: zone === "left", action: move("left") },
-      { label: "Mover para baixo (esquerda)", disabled: zone === "bottom-left", action: move("bottom-left") },
-      { label: "Mover para baixo (direita)", disabled: zone === "bottom-right", action: move("bottom-right") },
-      { label: "Mover para a direita", disabled: zone === "right", action: move("right") },
+      { label: "Mover para o painel esquerdo", icon: "panelLeft", disabled: tw.anchor === "left", action: move("left") },
+      { label: "Mover para o painel inferior", icon: "panelBottom", disabled: tw.anchor === "bottom", action: move(tw.side === "right" ? "bottom-right" : "bottom-left") },
+      { label: "Mover para o painel direito", icon: "panelRight", disabled: tw.anchor === "right", action: move("right") },
       { separator: true },
       { label: "Restaurar layout padrão", action: () => this.resetToolLayout() },
       { separator: true },
@@ -476,7 +446,7 @@ export class Workbench {
       const tw = this.toolWindows.get(id);
       if (tw) Object.assign(tw, { anchor: p.anchor, side: p.side, order: p.order });
     }
-    this.renderStripes();
+    this.renderChrome();
     this.show("project");
   }
 
@@ -496,34 +466,19 @@ export class Workbench {
     this.editors.active()?.focus();
   }
 
-  private renderStripes() {
-    const zones: Record<StripeZone, { tw: ToolWindow; el: HTMLElement }[]> = { left: [], right: [], "bottom-left": [], "bottom-right": [] };
-    const btn = (tw: ToolWindow) => {
-      const b = h(
-        "button.stripe-btn",
-        {
-          class: this.visible[tw.anchor] === tw.id ? "active" : "",
-          title: tw.title + (displayShortcut(tw.shortcut) ? `  ${displayShortcut(tw.shortcut)}` : "") + "\nArraste para mover",
-          onclick: () => !this.suppressStripeClick && this.toggle(tw.id),
-          onpointerdown: (e: PointerEvent) => this.stripeDrag(tw, b, e),
-        },
-        twIcon(tw.icon),
-        tw.badge ? h("span.badge-dot") : null,
-      );
-      zones[this.zoneOf(tw)].push({ tw, el: b });
-      return b;
-    };
-    const all = [...this.toolWindows.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const of = (z: StripeZone) => all.filter((t) => this.zoneOf(t) === z).map(btn);
-    const left = of("left");
-    const bottomLeft = of("bottom-left");
-    const right = of("right");
-    const bottomRight = of("bottom-right");
-    this.stripeZones = zones;
-    this.stripeLeft.replaceChildren(...left, left.length && bottomLeft.length ? h("span.stripe-sep") : "", h("span.grow"), ...bottomLeft);
-    const bell = twIcon("notifications");
-    bell.style.opacity = "0.7";
-    this.stripeRight.replaceChildren(...right, h("span.grow"), ...bottomRight, bottomRight.length ? h("span.stripe-sep") : "", bell);
+  /** Title bar layout toggles (state + news dot) and the headers of the visible cards. */
+  private renderChrome() {
+    for (const a of ["left", "bottom", "right"] as Anchor[]) {
+      const b = this.layoutBtns[a];
+      const members = this.zoneMembers(a);
+      b.classList.toggle("on", !!this.visible[a]);
+      b.classList.toggle("hidden", !members.length);
+      b.setAttribute("aria-pressed", this.visible[a] ? "true" : "false");
+      b.querySelector(".badge-dot")?.remove();
+      if (!this.visible[a] && members.some((t) => t.badge)) b.append(h("span.badge-dot"));
+      if (this.visible[a]) this.renderIsland(a, true);
+    }
+    this.toolbar.classList.toggle("left-hidden", !this.visible.left);
   }
 
   private initSplitters() {
@@ -557,14 +512,18 @@ export class Workbench {
 
   renderToolbar() {
     const win = getCurrentWindow();
-    const menuBtn = h("button.tb-btn", { title: "Menu principal (Alt+\\)" }, icon("general/menu"));
-    menuBtn.onclick = () => this.mainMenu(menuBtn);
-    const projBtn = h("button.tb-btn.project", { title: this.root }, projectBadge(this.name), h("span.tb-label", null, this.name), icon("general/chevronDown"));
+    // The Rits mark opens the main menu (on macOS it sits right after the traffic lights).
+    const logo = h("button.tb-logo", { title: "Menu principal (Alt+\\)", "aria-label": "Menu principal" }, icon("logoAccent"));
+    logo.onclick = () => this.mainMenu(logo);
+    // Shown only while the left card is hidden (the card carries the project and branch otherwise).
+    const projBtn = h("button.tb-btn.tb-project", { title: P.win(this.root) }, projectBadge(this.name), h("span.tb-label", null, this.name), icon("general/chevronDown"));
     projBtn.onclick = () => this.projectPopup(projBtn);
     this.vcsBtn.onclick = () => this.git.branchesPopup(this.vcsBtn);
     this.renderVcsWidget();
-    const searchBtn = h("button.tb-btn", { title: "Buscar em tudo (Shift duplo)", onclick: () => searchEverywhere(this) }, icon("general/search"));
-    const settingsBtn = h("button.tb-btn", { title: "Configurações (Ctrl+Alt+S)", onclick: () => openSettings(this) }, icon("general/settings"));
+    const newTab = h("button.tb-btn.tb-newtab", { title: "Novo…", "aria-label": "Novo" }, icon("general/add"));
+    newTab.onclick = () => this.newTabMenu(newTab);
+    const searchBtn = h("button.tb-btn", { title: "Buscar em tudo (Shift duplo)", "aria-label": "Buscar em tudo", onclick: () => searchEverywhere(this) }, icon("general/search"));
+    const settingsBtn = h("button.tb-btn", { title: "Configurações (Ctrl+Alt+S)", "aria-label": "Configurações", onclick: () => openSettings(this) }, icon("general/settings"));
     const maxIcon = h("span");
     const updateMax = async () => maxIcon.replaceChildren(icon((await win.isMaximized().catch(() => false)) ? "restoreWin" : "maximize"));
     updateMax();
@@ -572,31 +531,205 @@ export class Workbench {
     const drag = h("div.tb-drag", { "data-tauri-drag-region": true });
     drag.addEventListener("dblclick", () => win.toggleMaximize());
     this.toolbar.replaceChildren(
-      menuBtn,
+      logo,
       projBtn,
-      this.vcsBtn,
+      this.tabs.bar,
+      newTab,
       drag,
       this.runWidget,
-      h("span", { style: "width:6px" }),
+      h("span.tb-sep"),
+      this.layoutBtns.left,
+      this.layoutBtns.bottom,
+      this.layoutBtns.right,
+      h("span.tb-sep"),
       searchBtn,
       settingsBtn,
       h(
         "div.win-controls",
         null,
-        h("button.win-btn", { title: "Minimizar", onclick: () => win.minimize() }, icon("minimize")),
-        h("button.win-btn", { title: "Maximizar", onclick: () => win.toggleMaximize() }, maxIcon),
-        h("button.win-btn.close", { title: "Fechar", onclick: () => this.closeWindow() }, icon("closeWin")),
+        h("button.win-btn", { title: "Minimizar", "aria-label": "Minimizar", onclick: () => win.minimize() }, icon("minimize")),
+        h("button.win-btn", { title: "Maximizar", "aria-label": "Maximizar", onclick: () => win.toggleMaximize() }, maxIcon),
+        h("button.win-btn.close", { title: "Fechar", "aria-label": "Fechar", onclick: () => this.closeWindow() }, icon("closeWin")),
       ),
     );
+    // The empty parts of the bar and of the tab strip move the window (frameless on Windows).
     this.toolbar.addEventListener("mousedown", (e) => {
       if (e.target === this.toolbar && e.button === 0) win.startDragging();
     });
+    this.tabs.bar.addEventListener("mousedown", (e) => {
+      if (e.target === this.tabs.bar && e.button === 0) win.startDragging();
+    });
+    this.tabs.bar.addEventListener("dblclick", (e) => e.target === this.tabs.bar && win.toggleMaximize());
+    this.renderChrome();
+  }
+
+  /** The title bar "+": what a new tab can be. */
+  private newTabMenu(anchor: HTMLElement) {
+    const r = anchor.getBoundingClientRect();
+    contextMenu(r.left, r.bottom + 4, [
+      { label: "Novo arquivo…", icon: "actions/addFile", shortcut: "Alt+Insert", action: () => this.projectView.newFileAt(null) },
+      { label: "Terminal", icon: "toolwindows/terminal", shortcut: "Alt+F12", action: () => this.terminals.newTab() },
+      { label: "Nova conexão de banco…", icon: "database", action: () => this.db.newConnection() },
+      { separator: true },
+      { label: "Buscar em tudo", icon: "general/search", shortcut: "Shift Shift", action: () => searchEverywhere(this) },
+      { label: "Arquivos recentes", icon: "general/history", shortcut: "Ctrl+E", action: () => recentFiles(this) },
+    ]);
   }
 
   renderVcsWidget() {
     const b = this.git?.branch;
-    this.vcsBtn.replaceChildren(icon("branch"), h("span.tb-label", null, this.git?.isRepo === false ? "Controle de versão" : b ?? "…"), icon("general/chevronDown"));
+    this.vcsBtn.replaceChildren(icon("branch"), h("span.cp-branch-label", null, this.git?.isRepo === false ? "Controle de versão" : b ?? "…"), icon("general/chevronDown"));
     this.vcsBtn.title = this.git?.isRepo === false ? "Habilitar controle de versão" : `Branch Git: ${b ?? ""}`;
+    if (this.editors && !this.tabs.active) this.renderHome();
+  }
+
+  // ---------------- project home ("Início") ----------------
+
+  /** Looks at the project root for what the home page offers to run (compose, Dockerfile, tests, Terraform…). */
+  private async detectProject() {
+    const entries = await host.list(this.root).catch(() => []);
+    const byName = new Map(entries.map((e) => [e.name.toLowerCase(), e]));
+    const pick = (list: MenuItem[], prefix: string) => list.find((a) => a.label?.startsWith(prefix))?.action;
+    const found: Found[] = [];
+    const compose = ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"].map((n) => byName.get(n)).find((e) => e && !e.isDir);
+    if (compose) {
+      const up = pick(infraActions(this, compose.path, "compose"), "Subir (up");
+      found.push({ name: compose.name, path: compose.path, dir: false, sub: "docker compose up -d", icon: fileIcon(compose.name), action: up ? { label: "Subir serviços", run: up } : undefined });
+    }
+    const dockerfile = byName.get("dockerfile");
+    if (dockerfile && !dockerfile.isDir) {
+      const build = pick(infraActions(this, dockerfile.path, "dockerfile"), "Build da imagem");
+      found.push({ name: dockerfile.name, path: dockerfile.path, dir: false, sub: "docker build", icon: fileIcon(dockerfile.name), action: build ? { label: "Gerar imagem", run: build } : undefined });
+    }
+    const tf = entries.find((e) => !e.isDir && e.name.toLowerCase().endsWith(".tf"));
+    if (tf) {
+      const plan = pick(infraActions(this, tf.path, "terraform"), "plan");
+      found.push({ name: tf.name, path: tf.path, dir: false, sub: "terraform plan", icon: fileIcon(tf.name), action: plan ? { label: "Planejar", run: plan } : undefined });
+    }
+    const tests = byName.get("tests") ?? byName.get("test");
+    const goMod = byName.get("go.mod");
+    if (tests?.isDir) {
+      const go = (await host.list(tests.path).catch(() => [])).some((e) => e.name.endsWith(".go"));
+      found.push({ name: tests.name, path: tests.path, dir: true, sub: go ? "go test" : "pytest", icon: icon("nodes/testRoot"), action: { label: "Rodar testes", run: () => this.runner.runTestsIn(tests.path) } });
+    }
+    if (goMod && !goMod.isDir) found.push({ name: "go.mod", path: goMod.path, dir: false, sub: "Módulo Go", icon: fileIcon("go.mod") });
+    const pyproject = byName.get("pyproject.toml");
+    if (pyproject && !pyproject.isDir) found.push({ name: "pyproject.toml", path: pyproject.path, dir: false, sub: "Projeto Python", icon: fileIcon("pyproject.toml") });
+    this.found = found;
+    if (!this.tabs.active) this.renderHome();
+  }
+
+  /** The project home page: the project at a glance, shortcuts, what the project has, Run, and the command bar. */
+  renderHome() {
+    const key = (jb: string) => h("kbd.kbd", null, displayShortcut(jb) || jb);
+    const row = (ic: string, label: string, jb: string, run: () => void) =>
+      h("button.home-row", { onclick: run }, icon(ic), h("span.home-row-label", null, label), key(jb));
+    const chip = (ic: HTMLElement, text: string, title?: string) => h("span.home-chip", { title: title ?? text }, ic, h("span", null, text));
+    const branch = this.git?.isRepo === false ? "sem Git" : this.git?.branch ?? "…";
+    const home = this.env?.home ? P.win(this.root).replace(P.win(this.env.home), "~") : P.win(this.root);
+    const start = h(
+      "section.home-block",
+      null,
+      h("h2.home-block-title", null, "Comece por aqui"),
+      row("general/search", "Buscar em tudo", "Shift duplo", () => searchEverywhere(this)),
+      row("fileTypes/text", "Ir para arquivo", "Ctrl+Shift+N", () => searchEverywhere(this, "files")),
+      row("general/history", "Arquivos recentes", "Ctrl+E", () => recentFiles(this)),
+      row("toolwindows/terminal", "Abrir terminal", "Alt+F12", () => this.show("terminal", true)),
+    );
+    const project = h(
+      "section.home-block",
+      null,
+      h("h2.home-block-title", null, "No projeto"),
+      ...(this.found.length
+        ? this.found.map((f) =>
+            h(
+              "div.home-found",
+              null,
+              f.icon,
+              h("button.home-found-text", { title: f.dir ? `Mostrar ${f.name} no projeto` : `Abrir ${f.name}`, onclick: () => (f.dir ? this.projectView.reveal(f.path) : this.editors.openFile(f.path)) }, h("span", null, f.name), h("span.home-found-sub", null, f.sub)),
+              f.action ? h("button.btn.small", { onclick: f.action.run }, f.action.label) : null,
+            ),
+          )
+        : [h("p.home-empty", null, "Compose, Dockerfile, Terraform e pastas de testes aparecem aqui quando estão na raiz do projeto.")]),
+    );
+    const cfg = this.runner?.selected();
+    const run = h(
+      "section.home-block.home-run",
+      null,
+      icon("toolwindows/run"),
+      h("div.home-run-text", null, h("span.home-run-title", null, "Executar"), h("span.home-run-sub", null, cfg ? cfg.name : "Nenhuma configuração ainda. Abra um arquivo Python ou Go, ou crie uma.")),
+      h("button.btn", { onclick: () => this.runner.editConfigs() }, "Configurações"),
+      h("button.btn", { onclick: () => this.runner.runSelected(true) }, icon("run/debug"), "Depurar"),
+      h("button.btn.primary", { onclick: () => this.runner.runSelected(false) }, "Executar", h("span.btn-key", null, displayShortcut("Shift+F10") || "Shift+F10")),
+    );
+    this.home.replaceChildren(
+      h(
+        "div.home-scroll",
+        null,
+        h(
+          "div.home-inner",
+          null,
+          h(
+            "header.home-head",
+            null,
+            h("h1.home-title", null, this.name),
+            h(
+              "div.home-chips",
+              null,
+              chip(icon("branch"), branch),
+              this.python ? chip(icon("python/pythonClosed"), this.python.label) : null,
+              chip(icon("nodes/folder"), home, P.win(this.root)),
+            ),
+          ),
+          h("div.home-grid", null, start, project, run),
+        ),
+      ),
+      (this.cmdBar ??= this.commandBar()),
+    );
+    const cmdChip = (ic: string, text: string) => h("span.cmd-chip", null, icon(ic), text);
+    this.cmdChips.replaceChildren(cmdChip("nodes/folder", this.name), cmdChip("branch", branch), this.python ? cmdChip("python/pythonClosed", this.python.label) : "");
+  }
+
+  /** Warp-style input at the bottom of the home page: search everything, or run a command in the terminal. */
+  private commandBar() {
+    let mode: "search" | "command" = "search";
+    const input = h("input.cmd-input", { spellcheck: false, "aria-label": "Buscar ou executar comando" }) as HTMLInputElement;
+    const searchBtn = h("button.cmd-mode", { type: "button", onclick: () => setMode("search") }, "Buscar");
+    const cmdBtn = h("button.cmd-mode", { type: "button", onclick: () => setMode("command") }, "Comando");
+    const setMode = (m: typeof mode) => {
+      mode = m;
+      searchBtn.classList.toggle("on", m === "search");
+      cmdBtn.classList.toggle("on", m === "command");
+      searchBtn.setAttribute("aria-pressed", String(m === "search"));
+      cmdBtn.setAttribute("aria-pressed", String(m === "command"));
+      input.placeholder = m === "search" ? "Buscar arquivos, símbolos e ações" : `Comando no terminal, em ${this.name}`;
+      input.focus();
+    };
+    setMode("search");
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setMode(mode === "search" ? "command" : "search");
+      } else if (e.key === "Enter") {
+        const q = input.value.trim();
+        if (mode === "search") searchEverywhere(this, "all", q);
+        else if (q) this.terminals.newTab(this.root, q);
+        input.value = "";
+      }
+    });
+    return h(
+      "div.cmdbar",
+      null,
+      this.cmdChips,
+      h(
+        "div.cmd-line",
+        null,
+        h("span.cmd-prompt", { "aria-hidden": "true" }, "›"),
+        input,
+        h("span.cmd-modes", { role: "group", "aria-label": "Modo (Tab alterna)" }, searchBtn, cmdBtn),
+        h("kbd.kbd", null, "Enter ↵"),
+      ),
+    );
   }
 
   async projectPopup(anchor: HTMLElement) {
@@ -734,7 +867,7 @@ export class Workbench {
           { label: "Estrutura do arquivo", shortcut: "Ctrl+F12", action: () => fileStructurePopup(this) },
           { label: "Arquivos recentes", shortcut: "Ctrl+E", action: () => recentFiles(this) },
           { separator: true },
-          { label: document.documentElement.dataset.theme === "dark" ? "Tema Islands Light" : "Tema Islands Dark", action: () => (window as any).__toggleTheme?.() },
+          { label: document.documentElement.dataset.theme === "dark" ? "Tema Rits Claro" : "Tema Rits Escuro", action: () => (window as any).__toggleTheme?.() },
         ],
       },
       {

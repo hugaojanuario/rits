@@ -32,14 +32,14 @@ export async function mountWelcome(app: HTMLElement) {
   const toolbar = h(
     "div.main-toolbar",
     null,
-    h("span", { style: "width:8px" }),
+    h("span.tb-logo-static", { "aria-hidden": "true" }, icon("logoAccent")),
     drag,
     h(
       "div.win-controls",
       null,
-      h("button.win-btn", { onclick: () => win.minimize() }, icon("minimize")),
-      h("button.win-btn", { onclick: () => win.toggleMaximize() }, icon("maximize")),
-      h("button.win-btn.close", { onclick: () => win.close() }, icon("closeWin")),
+      h("button.win-btn", { title: "Minimizar", "aria-label": "Minimizar", onclick: () => win.minimize() }, icon("minimize")),
+      h("button.win-btn", { title: "Maximizar", "aria-label": "Maximizar", onclick: () => win.toggleMaximize() }, icon("maximize")),
+      h("button.win-btn.close", { title: "Fechar", "aria-label": "Fechar", onclick: () => win.close() }, icon("closeWin")),
     ),
   );
   let page: "projects" | "customize" | "learn" = "projects";
@@ -55,7 +55,7 @@ export async function mountWelcome(app: HTMLElement) {
   const draw = async () => {
     if (page === "customize") {
       const theme = document.documentElement.dataset.theme ?? "dark";
-      const sel = h("select.select", { style: "width:240px" }, h("option", { value: "dark", selected: theme === "dark" }, "Islands Dark"), h("option", { value: "light", selected: theme === "light" }, "Islands Light")) as HTMLSelectElement;
+      const sel = h("select.select", { style: "width:240px" }, h("option", { value: "dark", selected: theme === "dark" }, "Rits Escuro"), h("option", { value: "light", selected: theme === "light" }, "Rits Claro")) as HTMLSelectElement;
       sel.onchange = () => (window as any).__setTheme?.(sel.value);
       main.replaceChildren(h("div.settings-page", null, h("h3", null, "Tema de cores"), sel, h("div.hint", null, "Mais opções em Configurações (Ctrl+Alt+S) dentro de um projeto.")));
       return;

@@ -26,7 +26,7 @@ A data engineering workday usually spans several tools: PyCharm for the Python p
 - **Understand the model** with ER diagrams generated from the database: relations, keys and automatic layout.
 - **Run the infrastructure** with Docker, Compose, Terraform and Kubernetes straight from the editor.
 
-All with the look of the JetBrains IDEs (*Islands* theme) and, on macOS, native **Liquid Glass**.
+All with Rits' own look (the *Blocos* layout: tabs in the title bar, panels as cards and a start page for each project) and, on macOS, native **Liquid Glass**.
 
 > **Actually lightweight:** Rits uses the system WebView (Tauri 2), with no bundled Chromium. The app is about **7 MB**, and database drivers are only downloaded when you use that database.
 
@@ -88,10 +88,11 @@ Limitations: requires Airflow 3 (Airflow 2 is detected and rejected); the local 
 
 ### Experience
 
-- JetBrains IDE layout: project, branch and run widgets; tool windows on the side stripes; status bar with breadcrumbs.
-- Tool windows you can **drag** between the left and right stripes.
+- **Blocos** layout: file tabs in the title bar, panels as cards with a tool window switcher, buttons to show or hide each panel, and a quiet status bar.
+- **Project start page**: shortcuts, what was found in the project (Compose, Dockerfile, Terraform, tests) with the right action for each, Run, and a command bar that searches everything or runs a command in the terminal (Tab switches).
+- Tool windows move between the left, right and bottom panels from the ⋮ menu.
 - **VS Code** (default on macOS) and **JetBrains** keymaps, with shortcuts shown as ⌘⌥⇧ on the Mac.
-- Islands Dark and Light themes, and **Liquid Glass** on macOS 26 (vibrancy on earlier versions).
+- Rits Dark and Rits Light themes, with the brand lilac as the accent, and **Liquid Glass** on macOS 26 (vibrancy on earlier versions).
 
 ## Installation
 
@@ -109,7 +110,7 @@ brew install python go libpq mysql-client
 
 `npm run tauri build` produces the NSIS installer (about 3.5 MB) in `src-tauri/target/release/bundle/nsis/`.
 
-Plugins also find tools in the standard npm and WinGet folders, including tools installed after opening the IDE. Docker Desktop may be installed for the current user or in Program Files. Infrastructure actions work in PowerShell 5.1 and 7, including filenames with spaces and special characters. Liquid Glass is exclusive to macOS; Windows uses Islands Dark or Light.
+Plugins also find tools in the standard npm and WinGet folders, including tools installed after opening the IDE. Docker Desktop may be installed for the current user or in Program Files. Infrastructure actions work in PowerShell 5.1 and 7, including filenames with spaces and special characters. Liquid Glass is exclusive to macOS; Windows uses Rits Dark or Rits Light.
 
 ## Getting started
 
@@ -168,6 +169,6 @@ Integration tests (`cargo test -- --ignored`) use Postgres and MySQL in Docker p
 ## Credits and license
 
 - Code under the [MIT](LICENSE) license.
-- Icons in `src/assets/icons` and the theme colors come from [IntelliJ Community](https://github.com/JetBrains/intellij-community) (Apache 2.0; see `src/assets/icons/LICENSE-intellij-community.txt`). The Rits name, logo and remaining icons are original. No code or assets from commercial JetBrains products were used.
+- Icons in `src/assets/icons` and the editor syntax colors come from [IntelliJ Community](https://github.com/JetBrains/intellij-community) (Apache 2.0; see `src/assets/icons/LICENSE-intellij-community.txt`). The Rits name, logo and remaining icons are original. No code or assets from commercial JetBrains products were used.
 - Docker, PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Terraform and Kubernetes are trademarks of their respective owners; the icons are simplified drawings that identify each integration.
-- Inter and JetBrains Mono fonts (SIL Open Font License).
+- Figtree and JetBrains Mono fonts (SIL Open Font License).

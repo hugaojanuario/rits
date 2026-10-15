@@ -35,7 +35,8 @@ export class DbTools {
       id: "database",
       title: "Database",
       icon: "databaseTw",
-      anchor: "right",
+      // Blocos layout: the database explorer shares the left card with the project tree.
+      anchor: "left",
       shortcut: "Alt+2",
       body: h("div.tw-body", null, this.explorer.el),
       actions: () => [

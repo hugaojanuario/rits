@@ -1,7 +1,7 @@
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
-import "@fontsource/inter/700.css";
+import "@fontsource/figtree/400.css";
+import "@fontsource/figtree/500.css";
+import "@fontsource/figtree/600.css";
+import "@fontsource/figtree/700.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 import { setIconTheme } from "./icons";
@@ -16,7 +16,7 @@ import { host, IS_MAC } from "./ide/host";
 if (IS_MAC) document.documentElement.classList.add("mac");
 
 // Liquid Glass (macOS): the window is transparent over the native glass material; the "glass" class
-// switches styles.css to translucent tokens. Off → opaque Islands look over the same window.
+// switches styles.css to translucent tokens. Off → the opaque Rits look over the same window.
 function setGlass(on: boolean) {
   document.documentElement.classList.toggle("glass", IS_MAC && on);
   try {

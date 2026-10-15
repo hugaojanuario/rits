@@ -69,11 +69,12 @@ export function projectInitials(name: string): string {
   return (name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2) || "P").toUpperCase();
 }
 
+/** The project's initials on a tint of its color (Blocos look: no gradient). */
 export function projectBadge(name: string, big = false): HTMLSpanElement {
-  const [a, b] = projectColors(name);
+  const [a] = projectColors(name);
   const s = document.createElement("span");
   s.className = "project-badge" + (big ? " big" : "");
-  s.style.background = `linear-gradient(135deg, ${a}, ${b})`;
+  s.style.setProperty("--pc", a);
   s.textContent = projectInitials(name);
   return s;
 }

@@ -26,10 +26,13 @@ export class TabManager {
   active: Tab | null = null;
   private empty: HTMLElement;
   private history: Tab[] = [];
+  /** A pinned first tab that shows the "empty" page (the project home); null = no such tab. */
+  private home: { title: string; icon: string } | null;
   onChange?: () => void;
 
-  constructor(empty: HTMLElement) {
+  constructor(empty: HTMLElement, home: { title: string; icon: string } | null = null) {
     this.empty = empty;
+    this.home = home;
     this.content.append(empty);
     this.bar.addEventListener("wheel", (e) => {
       this.bar.scrollLeft += e.deltaY;
@@ -64,6 +67,17 @@ export class TabManager {
     this.empty.style.display = "none";
     this.renderBar();
     tab.onActivate?.();
+    this.onChange?.();
+  }
+
+  /** Shows the home page (the pinned first tab) without closing any tab. */
+  showHome() {
+    if (!this.home) return;
+    if (this.active) this.active.onDeactivate?.();
+    this.active = null;
+    for (const t of this.tabs) t.el.style.display = "none";
+    this.empty.style.display = "";
+    this.renderBar();
     this.onChange?.();
   }
 
@@ -103,6 +117,7 @@ export class TabManager {
   }
 
   cycle(dir: 1 | -1) {
+    if (!this.active && this.tabs.length) return this.activate(this.recent()[0] ?? this.tabs[0]);
     if (!this.active || this.tabs.length < 2) return;
     const i = this.tabs.indexOf(this.active);
     this.activate(this.tabs[(i + dir + this.tabs.length) % this.tabs.length]);
@@ -113,7 +128,12 @@ export class TabManager {
   }
 
   renderBar() {
+    const home = this.home;
+    const homeEl = home
+      ? h("button.tab.tab-home", { class: this.active ? "" : "active", title: home.title, "aria-label": home.title, onmousedown: (e: MouseEvent) => e.button === 0 && this.showHome() }, icon(home.icon))
+      : null;
     this.bar.replaceChildren(
+      ...(homeEl ? [homeEl] : []),
       ...this.tabs.map((t) => {
         const el = h(
           "div.tab",

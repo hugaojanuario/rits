@@ -26,7 +26,7 @@ O **Rits** junta esse fluxo numa IDE desktop rápida e leve:
 - **Entenda o modelo** com diagramas ER gerados do banco, com relações, chaves e layout automático.
 - **Suba a infraestrutura** com Docker, Compose, Terraform e Kubernetes direto do editor.
 
-Tudo com o visual das IDEs JetBrains (tema *Islands*) e, no macOS, com o **Liquid Glass** nativo.
+Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em cartões e uma tela de início para cada projeto) e, no macOS, com o **Liquid Glass** nativo.
 
 > **Leve de verdade:** o Rits usa o WebView do sistema (Tauri 2), sem Chromium embutido. O app tem cerca de **7 MB**, e os drivers de banco só são baixados quando você usa aquele banco.
 
@@ -86,10 +86,11 @@ Limitações: requer Airflow 3 (o Airflow 2 é detectado e recusado); o ambiente
 
 ### Experiência
 
-- Layout das IDEs JetBrains: barra de projeto, branch e execução; janelas de ferramentas nas laterais; status bar com breadcrumbs.
-- Janelas de ferramentas **arrastáveis** entre as faixas da esquerda e da direita.
+- Layout **Blocos**: abas dos arquivos na barra de título, painéis em cartões com um seletor de janelas de ferramentas, botões para mostrar ou esconder cada painel e uma barra de status discreta.
+- **Tela de início do projeto**: atalhos, o que foi encontrado no projeto (Compose, Dockerfile, Terraform, testes) com a ação certa para cada um, Executar e uma barra de comando que busca em tudo ou roda um comando no terminal (Tab alterna).
+- Janelas de ferramentas movidas entre os painéis esquerdo, direito e inferior pelo menu ⋮.
 - Keymaps **VS Code** (padrão no macOS) e **JetBrains**, com os atalhos exibidos com ⌘⌥⇧ no Mac.
-- Temas Islands Dark e Light, e **Liquid Glass** no macOS 26 (vibrancy nas versões anteriores).
+- Temas Rits Escuro e Rits Claro, com o lilás da marca como cor de destaque, e **Liquid Glass** no macOS 26 (vibrancy nas versões anteriores).
 - Interface toda em português.
 
 ## Instalação
@@ -108,7 +109,7 @@ brew install python go libpq mysql-client
 
 `npm run tauri build` gera o instalador NSIS (cerca de 3,5 MB) em `src-tauri/target/release/bundle/nsis/`.
 
-Os plugins também encontram ferramentas nas pastas padrão do npm e WinGet, mesmo quando instaladas depois de abrir a IDE. O Docker Desktop pode estar instalado só para seu usuário ou em Program Files. As ações de infraestrutura funcionam no PowerShell 5.1 e 7, inclusive com nomes de arquivo que contêm espaços e caracteres especiais. O Liquid Glass é exclusivo do macOS; no Windows, use Islands Dark ou Light.
+Os plugins também encontram ferramentas nas pastas padrão do npm e WinGet, mesmo quando instaladas depois de abrir a IDE. O Docker Desktop pode estar instalado só para seu usuário ou em Program Files. As ações de infraestrutura funcionam no PowerShell 5.1 e 7, inclusive com nomes de arquivo que contêm espaços e caracteres especiais. O Liquid Glass é exclusivo do macOS; no Windows, use Rits Escuro ou Rits Claro.
 
 ## Primeiros passos
 
@@ -167,6 +168,6 @@ Os testes de integração (`cargo test -- --ignored`) usam Postgres e MySQL no D
 ## Créditos e licença
 
 - Código sob a licença [MIT](LICENSE).
-- Os ícones em `src/assets/icons` e as cores dos temas vêm do [IntelliJ Community](https://github.com/JetBrains/intellij-community) (Apache 2.0; veja `src/assets/icons/LICENSE-intellij-community.txt`). O nome, a logo do Rits e os demais ícones são próprios. Nenhum código ou asset de produtos comerciais da JetBrains foi usado.
+- Os ícones em `src/assets/icons` e as cores de sintaxe do editor vêm do [IntelliJ Community](https://github.com/JetBrains/intellij-community) (Apache 2.0; veja `src/assets/icons/LICENSE-intellij-community.txt`). O nome, a logo do Rits e os demais ícones são próprios. Nenhum código ou asset de produtos comerciais da JetBrains foi usado.
 - Docker, PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Terraform e Kubernetes são marcas de seus respectivos donos; os ícones são desenhos simplificados para identificar cada integração.
-- Fontes Inter e JetBrains Mono (SIL Open Font License).
+- Fontes Figtree e JetBrains Mono (SIL Open Font License).

@@ -44,7 +44,7 @@ export function openSettings(wb: Workbench, page: Page | string = "appearance", 
 
 function appearance(_wb: Workbench, el: HTMLElement) {
   const theme = document.documentElement.dataset.theme ?? "dark";
-  const sel = h("select.select", { style: "width:240px" }, h("option", { value: "dark", selected: theme === "dark" }, "Islands Dark"), h("option", { value: "light", selected: theme === "light" }, "Islands Light")) as HTMLSelectElement;
+  const sel = h("select.select", { style: "width:240px" }, h("option", { value: "dark", selected: theme === "dark" }, "Rits Escuro"), h("option", { value: "light", selected: theme === "light" }, "Rits Claro")) as HTMLSelectElement;
   sel.onchange = () => (window as any).__setTheme?.(sel.value);
   const size = h("input.input", { type: "number", min: 11, max: 18, value: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--ui-font-size")) || 13, style: "width:90px" }) as HTMLInputElement;
   size.onchange = () => {
@@ -407,8 +407,8 @@ function about(_wb: Workbench, el: HTMLElement) {
       icon("logo"),
       h("h2", null, "Rits 0.2.0"),
       h("p.dim", null, "IDE leve para Python, Go e bancos de dados — Tauri + Rust + TypeScript."),
-      h("p.dim", null, "Interface no estilo Islands. Ícones e cores derivados do projeto IntelliJ Community (Apache 2.0)."),
-      h("p.dim", null, "Fontes: Inter e JetBrains Mono (SIL OFL)."),
+      h("p.dim", null, "Interface Blocos, do próprio Rits. Ícones derivados do projeto IntelliJ Community (Apache 2.0)."),
+      h("p.dim", null, "Fontes: Figtree e JetBrains Mono (SIL OFL)."),
     ),
   );
 }
