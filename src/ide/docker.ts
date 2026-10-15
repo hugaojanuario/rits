@@ -39,8 +39,13 @@ export const DOCKER_INSTALL = IS_WIN
   ? { program: "winget", args: ["install", "--id", "Docker.DockerDesktop", "-e", "--accept-source-agreements", "--accept-package-agreements"], label: "winget install Docker.DockerDesktop" }
   : { program: "brew", args: ["install", "--cask", "docker"], label: "brew install --cask docker" };
 
+// Launchers that return at once: the app must outlive the command (capture/runBackground kill what they started).
 const startEngine = () =>
-  IS_MAC ? { program: "open", args: ["-a", "Docker"] } : IS_WIN ? { program: "C:/Program Files/Docker/Docker/Docker Desktop.exe", args: [] } : { program: "systemctl", args: ["--user", "start", "docker-desktop"] };
+  IS_MAC
+    ? { program: "open", args: ["-a", "Docker"] }
+    : IS_WIN
+      ? { program: "cmd", args: ["/c", "start", "", "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"] }
+      : { program: "systemctl", args: ["--user", "start", "docker-desktop"] };
 
 /** Components shown on the plugin card. */
 export const DOCKER_COMPONENTS: (Component & { action: string })[] = [

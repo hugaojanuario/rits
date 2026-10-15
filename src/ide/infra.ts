@@ -2,7 +2,7 @@
 // Detection, file templates ("Novo" menu) and actions that run the real CLIs in the Terminal
 // (docker, docker compose, terraform, kubectl). Language servers live in lsp.ts.
 import { confirmDialog, promptDialog, type MenuItem } from "../ui";
-import { P } from "./host";
+import { IS_WIN, P } from "./host";
 import type { Workbench } from "./workbench";
 
 export type InfraKind = "dockerfile" | "compose" | "terraform" | "k8s";
@@ -29,6 +29,9 @@ export const INFRA_ICON: Record<InfraKind, string> = { dockerfile: "docker", com
 
 const q = (s: string) => (/^[\w./:@-]+$/.test(s) ? s : `"${s.replace(/"/g, '\\"')}"`);
 
+/** "a && b" for the terminal shell: Windows PowerShell 5.1 has no && (nor < redirection). */
+const then = (a: string, b: string) => (IS_WIN ? `${a}; if ($?) { ${b} }` : `${a} && ${b}`);
+
 function term(wb: Workbench, cwd: string, command: string) {
   wb.show("terminal");
   wb.terminals.newTab(cwd, command);
@@ -48,7 +51,7 @@ export function infraActions(wb: Workbench, path: string, kind: InfraKind): (Men
         { label: "Status (ps)", icon: "toolwindows/services", action: () => term(wb, dir, `${f} ps`) },
         { label: "Logs", icon: "log", primary: true, action: () => term(wb, dir, `${f} logs -f --tail 200`) },
         { label: "Baixar imagens (pull)", icon: "general/download", action: () => term(wb, dir, `${f} pull`) },
-        { label: "Validar (config)", icon: "actions/checked", action: () => term(wb, dir, `${f} config --quiet && echo "compose válido"`) },
+        { label: "Validar (config)", icon: "actions/checked", action: () => term(wb, dir, then(`${f} config --quiet`, `echo "compose válido"`)) },
         ...(wb.docker ? [{ separator: true } as MenuItem, { label: "Abrir janela Docker", icon: "docker", action: () => wb.show("docker", true) }] : []),
       ];
     }
@@ -68,10 +71,10 @@ export function infraActions(wb: Workbench, path: string, kind: InfraKind): (Men
           icon: "run/rerun",
           action: async () => {
             const tag = await promptDialog("Build e executar", "Nome:tag da imagem", P.base(wb.root).toLowerCase().replace(/[^a-z0-9._-]/g, "-") + ":dev");
-            if (tag) term(wb, dir, `docker build -f ${file} -t ${q(tag)} . && docker run --rm -it ${q(tag)}`);
+            if (tag) term(wb, dir, then(`docker build -f ${file} -t ${q(tag)} .`, `docker run --rm -it ${q(tag)}`));
           },
         },
-        { label: "Analisar com hadolint", icon: "general/show", action: () => term(wb, dir, `docker run --rm -i hadolint/hadolint < ${file}`) },
+        { label: "Analisar com hadolint", icon: "general/show", action: () => term(wb, dir, IS_WIN ? `Get-Content ${file} | docker run --rm -i hadolint/hadolint` : `docker run --rm -i hadolint/hadolint < ${file}`) },
       ];
     case "terraform":
       return [
