@@ -13,6 +13,12 @@
   <b>Português</b> · <a href="README.en.md">English</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe">Baixar Windows x64</a> ·
+  <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg">Baixar macOS Apple Silicon</a> ·
+  <a href="https://github.com/hugaojanuario/rits/releases/latest">Releases</a>
+</p>
+
 ---
 
 ## O que é o Rits
@@ -59,7 +65,7 @@ Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em c
 ### Código
 
 - **Python** (basedpyright, Ruff, debugpy, pytest) e **Go** (gopls, Delve, staticcheck), instalados com um clique em Configurações › Plugins.
-- **Autocomplete no estilo JetBrains**: relevância do servidor de linguagem, documentação ao lado, **importação automática** ao aceitar, Tab ou Enter. Liga e desliga em Configurações › Editor.
+- **Autocomplete no estilo JetBrains**: relevância do servidor de linguagem, documentação ao lado, **importação automática** ao aceitar, Tab ou Enter. Tab aceita a sugestão selecionada nos editores de código e SQL; sem sugestão, mantém a indentação. Liga e desliga em Configurações › Editor.
 - Ir para definição, encontrar usos, renomear, quick fixes, reformatar e otimizar imports.
 - Executar e depurar com breakpoints, variáveis, step e console; ▶ no gutter para `main` e testes.
 - **Git** completo: commit, push/pull, branches, log, diff lado a lado.
@@ -97,7 +103,7 @@ Limitações: requer Airflow 3 (o Airflow 2 é detectado e recusado); o ambiente
 
 ### macOS (Apple Silicon)
 
-Gere o app a partir do código (veja [Desenvolvimento](#desenvolvimento)) e abra `Rits.app` ou o `.dmg` em `src-tauri/target/release/bundle/`. O app usa assinatura ad-hoc: na primeira vez, use clique direito › **Abrir**.
+[Baixe o DMG para Apple Silicon](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg), abra e arraste o Rits para Aplicativos. O app usa assinatura ad-hoc, sem notarização: na primeira vez, use clique direito › **Abrir** e, se necessário, autorize em Ajustes do Sistema › Privacidade e Segurança.
 
 As ferramentas de linguagem e de banco vêm do Homebrew:
 
@@ -107,7 +113,7 @@ brew install python go libpq mysql-client
 
 ### Windows 11
 
-`npm run tauri build` gera o instalador NSIS (cerca de 3,5 MB) em `src-tauri/target/release/bundle/nsis/`.
+[Baixe o instalador para Windows x64](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe) e execute. O WebView2 é instalado automaticamente se necessário. A [página da release](https://github.com/hugaojanuario/rits/releases/latest) também traz `SHA256SUMS.txt` para conferir os downloads.
 
 Os plugins também encontram ferramentas nas pastas padrão do npm e WinGet, mesmo quando instaladas depois de abrir a IDE. O Docker Desktop pode estar instalado só para seu usuário ou em Program Files. As ações de infraestrutura funcionam no PowerShell 5.1 e 7, inclusive com nomes de arquivo que contêm espaços e caracteres especiais. O Liquid Glass é exclusivo do macOS; no Windows, use Rits Escuro ou Rits Claro.
 

@@ -3,19 +3,21 @@
 // (completionItem/resolve), snippets, and buffer words when there is no language server.
 // Settings live in localStorage ("completion") and are applied live to open editors.
 import {
+  acceptCompletion,
   autocompletion,
   completeAnyWord,
   completeFromList,
   insertCompletionText,
   pickedCompletion,
+  selectedCompletion,
   snippet,
   type Completion,
   type CompletionContext,
   type CompletionResult,
   type CompletionSource,
 } from "@codemirror/autocomplete";
-import { Compartment, type Extension } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import { Compartment, Prec, type Extension } from "@codemirror/state";
+import { keymap, type EditorView } from "@codemirror/view";
 import { LSPPlugin, serverCompletionSource } from "@codemirror/lsp-client";
 
 export interface CompletionSettings {
@@ -227,6 +229,25 @@ export function completionExtension(): Extension {
 export function tabAccepts() {
   return completionSettings().tabAccepts;
 }
+
+/** Completion wins over indentation and snippet navigation while a suggestion is selected. */
+export const completionTabKeymap = Prec.highest(keymap.of([{
+  key: "Tab",
+  run(view) {
+    const state = view.state;
+    const option = selectedCompletion(state);
+    if (!tabAccepts() || state.readOnly || !option) return false;
+    if (!acceptCompletion(view)) {
+      // CodeMirror guards newly opened suggestions for 75 ms (also used by Enter).
+      // Consume Tab now and accept after that guard, unless the user edits or moves away.
+      setTimeout(() => {
+        if (view.dom.isConnected && tabAccepts() && view.state.doc === state.doc &&
+            view.state.selection.eq(state.selection) && selectedCompletion(view.state) === option) acceptCompletion(view);
+      }, 80);
+    }
+    return true;
+  },
+}]));
 
 function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

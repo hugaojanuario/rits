@@ -13,6 +13,12 @@
   <a href="README.md">Português</a> · <b>English</b>
 </p>
 
+<p align="center">
+  <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe">Download Windows x64</a> ·
+  <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg">Download macOS Apple Silicon</a> ·
+  <a href="https://github.com/hugaojanuario/rits/releases/latest">Releases</a>
+</p>
+
 ---
 
 ## What is Rits
@@ -61,7 +67,7 @@ The user interface is in Brazilian Portuguese.
 ### Code
 
 - **Python** (basedpyright, Ruff, debugpy, pytest) and **Go** (gopls, Delve, staticcheck), installed with one click in Settings › Plugins.
-- **JetBrains-style completion**: language-server relevance, documentation beside the list, **auto-import** on accept, Tab or Enter. Toggle it in Settings › Editor.
+- **JetBrains-style completion**: language-server relevance, documentation beside the list, **auto-import** on accept, Tab or Enter. Tab accepts the selected suggestion in code and SQL editors; without a suggestion, it keeps indenting. Toggle it in Settings › Editor.
 - Go to definition, find usages, rename, quick fixes, reformat and optimize imports.
 - Run and debug with breakpoints, variables, stepping and a console; ▶ in the gutter for `main` and tests.
 - Full **Git**: commit, push/pull, branches, log, side-by-side diff.
@@ -98,7 +104,7 @@ Limitations: requires Airflow 3 (Airflow 2 is detected and rejected); the local 
 
 ### macOS (Apple Silicon)
 
-Build the app from source (see [Development](#development)) and open `Rits.app` or the `.dmg` in `src-tauri/target/release/bundle/`. The app is ad-hoc signed: the first time, right-click › **Open**.
+[Download the DMG for Apple Silicon](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg), open it and drag Rits to Applications. The app is ad-hoc signed, without notarization: the first time, right-click › **Open** and, if needed, allow it in System Settings › Privacy & Security.
 
 Language and database tools come from Homebrew:
 
@@ -108,7 +114,7 @@ brew install python go libpq mysql-client
 
 ### Windows 11
 
-`npm run tauri build` produces the NSIS installer (about 3.5 MB) in `src-tauri/target/release/bundle/nsis/`.
+[Download the Windows x64 installer](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe) and run it. WebView2 is installed automatically if needed. The [release page](https://github.com/hugaojanuario/rits/releases/latest) also includes `SHA256SUMS.txt` to verify downloads.
 
 Plugins also find tools in the standard npm and WinGet folders, including tools installed after opening the IDE. Docker Desktop may be installed for the current user or in Program Files. Infrastructure actions work in PowerShell 5.1 and 7, including filenames with spaces and special characters. Liquid Glass is exclusive to macOS; Windows uses Rits Dark or Rits Light.
 

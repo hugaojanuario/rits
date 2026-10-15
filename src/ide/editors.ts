@@ -6,8 +6,8 @@ import {
 } from "@codemirror/view";
 import { EditorState, Compartment, StateField, StateEffect, RangeSet, RangeSetBuilder, EditorSelection, type Extension, type Text } from "@codemirror/state";
 import { indentOnInput, bracketMatching, foldGutter, foldKeymap, syntaxTree } from "@codemirror/language";
-import { acceptCompletion, closeBrackets, closeBracketsKeymap, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete";
-import { completionComp, completionExtension, tabAccepts } from "./completion";
+import { closeBrackets, closeBracketsKeymap, completionKeymap, startCompletion } from "@codemirror/autocomplete";
+import { completionComp, completionExtension, completionTabKeymap } from "./completion";
 import {
   defaultKeymap, history, historyKeymap, indentWithTab, toggleComment, toggleBlockComment, undo, redo, copyLineDown,
   deleteLine, moveLineUp, moveLineDown, selectParentSyntax, selectLine,
@@ -357,6 +357,7 @@ export class CodeEditor {
       indentOnInput(),
       bracketMatching(),
       closeBrackets(),
+      completionTabKeymap,
       completionComp.of(completionExtension()),
       rectangularSelection(),
       crosshairCursor(),
@@ -404,8 +405,6 @@ export class CodeEditor {
     const jb = (run: Run): Run => (v) => keymapId() === "jetbrains" && run(v);
     const vs = (run: Run): Run => (v) => keymapId() === "vscode" && run(v);
     return [
-      // Tab accepts the selected completion (JetBrains), when enabled in Settings › Editor
-      { key: "Tab", run: (v: EditorView) => tabAccepts() && completionStatus(v.state) === "active" && acceptCompletion(v) },
       // JetBrains
       { key: "Mod-d", run: jb(copyLineDown), preventDefault: true },
       { key: "Mod-y", run: jb(deleteLine), preventDefault: true },

@@ -11,6 +11,7 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 import type { CompletionTable, DbKind } from "./api";
 import { splitSql } from "./util";
+import { completionTabKeymap } from "./ide/completion";
 
 const highlight = HighlightStyle.define([
   { tag: t.keyword, color: "var(--syn-keyword)", fontWeight: "600" },
@@ -128,6 +129,7 @@ export function createEditor(
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
+        completionTabKeymap,
         autocompletion({ activateOnTyping: true, maxRenderedOptions: 80 }),
         rectangularSelection(),
         crosshairCursor(),
