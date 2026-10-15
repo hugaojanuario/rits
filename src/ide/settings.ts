@@ -7,6 +7,7 @@ import { host, INSTALL, IS_MAC, IS_WIN, P } from "./host";
 import { keymapId, keymapTable, setKeymap, type KeymapId } from "./keymap";
 import { completionSettings, setCompletionSettings, type CompletionSettings } from "./completion";
 import { DOCKER_COMPONENTS, DOCKER_INSTALL, dockerEnabled, setDockerEnabled } from "./docker";
+import { airflowEnabled, setAirflowEnabled } from "./airflow/plugin";
 import { PLUGINS, clearSdkCache, findGo, findInterpreters, runBackground, setCurrentPython, getCurrentPython, type LangPlugin } from "./sdk";
 import type { Workbench } from "./workbench";
 
@@ -233,7 +234,7 @@ async function pluginsPage(wb: Workbench, el: HTMLElement, focus?: string) {
   const cards: HTMLElement[] = [];
   for (const p of PLUGINS) cards.push(await pluginCard(wb, p, el, focus === p.id));
   el.append(...cards);
-  el.append(h("h3", { style: "margin-top:8px" }, "Infraestrutura"), await dockerCard(wb, el, focus === "docker"));
+  el.append(h("h3", { style: "margin-top:8px" }, "Infraestrutura"), await dockerCard(wb, el, focus === "docker"), airflowCard(wb, el, focus === "airflow"));
   const builtin: [string, string, string][] = [
     ["Database Tools", "database", "PostgreSQL e MySQL/MariaDB: explorador, console SQL, editor de dados, backup e restauração."],
     ["Git", "branch", "Branches, commit, push/pull, log, diff e marcadores de alteração no editor."],
@@ -244,6 +245,28 @@ async function pluginsPage(wb: Workbench, el: HTMLElement, focus?: string) {
     h("h3", { style: "margin-top:8px" }, "Incluídos"),
     ...builtin.map(([name, ic, desc]) =>
       h("div.plugin-card", null, h("div.pc-icon", null, icon(ic)), h("div.pc-body", null, h("div.pc-title", null, name, h("span.tag.ok", null, "incluído")), h("div.dim", null, desc))),
+    ),
+  );
+}
+
+function airflowCard(wb: Workbench, el: HTMLElement, highlightCard: boolean): HTMLElement {
+  const on = airflowEnabled();
+  const toggle = h("button.btn", { class: on ? "" : "primary" }, icon(on ? "general/delete" : "actions/install"), on ? "Desinstalar" : "Instalar plugin") as HTMLButtonElement;
+  toggle.onclick = () => {
+    setAirflowEnabled(!on);
+    if (!on) notify("Plugin Apache Airflow instalado", "A janela Airflow apareceu na faixa da direita. Conecte uma instância ou crie um ambiente local com Docker.", "ok", [{ label: "Abrir", run: () => setTimeout(() => wb.show("airflow", true), 300) }], 8000);
+    pluginsPage(wb, clear(el), "airflow");
+  };
+  return h(
+    "div.plugin-card",
+    { style: highlightCard ? "border-color:var(--accent)" : "" },
+    h("div.pc-icon", null, icon("airflow")),
+    h(
+      "div.pc-body",
+      null,
+      h("div.pc-title", null, "Apache Airflow", on ? h("span.tag.ok", null, "ativo") : "", h("span.grow"), toggle),
+      h("div.dim", null, "Integração nativa com a API pública do Airflow 3 (/api/v2): DAGs, execuções, grafo de tarefas, logs ao vivo, pausa, disparo com configuração JSON e reexecução. Cria ambientes locais com Docker e associa o projeto às DAGs."),
+      h("div.hint", null, "Não precisa de Airflow instalado na máquina. Senhas e tokens ficam no cofre do sistema (Keychain / Credential Manager)."),
     ),
   );
 }

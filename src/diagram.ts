@@ -87,7 +87,9 @@ export function createDiagramTab(conn: ConnConfig, db: string, schema: string, o
     tbBtn("Copiar como Mermaid (erDiagram)", "general/copy", () => copyMermaid()),
     tbBtn("Atualizar", "refresh", () => load()),
   );
-  const el = h("div.dg", null, canvas, toolbar, minimap, status);
+  const dg = h("div.dg", null, canvas, toolbar, minimap, status);
+  // The tab root gets the absolute "tab-pane" class; .dg (position: relative) must not be that root.
+  const el = h("div", null, dg);
 
   // ---------------- data ----------------
 
@@ -541,7 +543,7 @@ export function createDiagramTab(conn: ConnConfig, db: string, schema: string, o
   // ---------------- export ----------------
 
   function exportSvgText(): string {
-    const css = getComputedStyle(el);
+    const css = getComputedStyle(dg);
     const v = (n: string) => css.getPropertyValue(n).trim();
     const b = bounds();
     const pad = 40;

@@ -334,6 +334,7 @@ export class ProjectView {
           { label: ".gitignore", icon: "fileTypes/gitignore", action: () => this.createFile(P.join(dir, ".gitignore"), defaultGitignore()) },
           { separator: true },
           ...INFRA_TEMPLATES.map((t) => ({ label: t.label, icon: t.icon, action: () => this.createInfra(t, dir) })),
+          ...(this.wb.airflow ? [{ label: "DAG do Airflow", icon: "airflow", action: () => this.wb.airflow!.newDag(dir) }] : []),
         ],
       },
       { separator: true },

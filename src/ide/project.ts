@@ -20,6 +20,16 @@ export interface ProjectSettings {
   layout?: Record<string, unknown>;
   goFmtOnSave?: boolean;
   dbConsoles?: import("../console").ConsoleState[];
+  /** Airflow plugin: instance the project deploys to and how DAG files reach it. */
+  airflow?: AirflowProjectLink;
+}
+
+export interface AirflowProjectLink {
+  instanceId: string;
+  /** DAG folder inside the project (relative), e.g. "dags". */
+  dagsDir: string;
+  /** volume: mounted in the local Docker environment; git: published by commit + push (CI/git-sync); manual: the user copies them. */
+  delivery: "volume" | "git" | "manual";
 }
 
 export interface RunConfig {

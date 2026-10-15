@@ -1,3 +1,4 @@
+pub mod airflow;
 pub mod db;
 pub mod store;
 pub mod tools;
@@ -302,6 +303,7 @@ pub fn run() {
         .manage(fsx::Watchers::default())
         .manage(procs::Procs::default())
         .manage(procs::Terms::default())
+        .manage(airflow::AirflowState::default())
         .invoke_handler(tauri::generate_handler![
             list_connections,
             save_connection,
@@ -355,7 +357,20 @@ pub fn run() {
             ide::pty_write,
             ide::pty_resize,
             ide::pty_close,
-            ide::window_reset
+            ide::window_reset,
+            airflow::airflow_instances,
+            airflow::airflow_save_instance,
+            airflow::airflow_delete_instance,
+            airflow::airflow_test,
+            airflow::airflow_request,
+            airflow::airflow_get_all,
+            airflow::airflow_cancel,
+            airflow::airflow_release,
+            airflow::airflow_env_dir,
+            airflow::airflow_env_compose,
+            airflow::airflow_env_register,
+            airflow::airflow_env_health,
+            airflow::airflow_env_forget
         ])
         .build(tauri::generate_context!())
         .expect("error while building Rits")

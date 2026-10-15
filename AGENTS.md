@@ -77,6 +77,8 @@ cd src-tauri && cargo test -- --ignored --test-threads=1
 |---|---|
 | `tests/db_integration.rs` | metadados, DDL, várias instruções por execução, erros, acentos e cancelamento de query (Postgres/MySQL) |
 | `tests/tools_docker.rs` | os argumentos exatos que o app monta para `pg_dump`/`pg_restore`/`psql`/`mysqldump`/`mysql`, executados de verdade dentro dos containers |
+| `tests/airflow_client.rs` | cliente Airflow contra um servidor HTTP falso: login, cache e renovação do JWT, 401 → um novo login, paginação, 403/500, POST que falha ou estoura o tempo **não** é repetido, detecção de Airflow 2, caminhos permitidos (roda no `cargo test` normal) |
+| `tests/airflow_live.rs` | fluxo completo num Airflow 3 real (`--ignored`; veja 5.9) |
 | `tests/ext_driver.rs` | drivers sob demanda: cria o venv dos drivers numa pasta temporária e conversa com o `rits_driver.py` via `ExtConn` (SQLite, sem download) |
 | `tests/ide_backend.rs` | framing JSON-RPC com escritas picotadas, UTF-8 dividido entre leituras, operações de arquivo (CRLF, BOM, binário, .gitignore, busca), e handshake real com gopls, basedpyright, debugpy e Delve via TCP |
 
@@ -145,6 +147,8 @@ src/
     keymap.ts              keymaps JetBrains e VS Code: displayShortcut(), tabelas do Keymap
     completion.ts          autocomplete (LSP com resolve/auto-import, relevância, ícones por tipo; palavras do arquivo sem LSP)
     infra.ts               Dockerfile, Compose, Terraform e Kubernetes: detecção, ações (CLIs no Terminal) e modelos
+    airflow/               plugin opcional Apache Airflow (seção 5.9): plugin.ts (entrada leve), api.ts, panel.ts,
+                           dagTab.ts, instanceDialog.ts, env.ts (ambiente Docker), project.ts, web.ts
   assets/icons/            SVGs do expui (Apache 2.0) com variantes _dark e @20x20
 src-tauri/
   tauri.conf.json          productName "Rits", identifier "dev.rits.ide", janela sem moldura
@@ -153,6 +157,7 @@ src-tauri/
   src/lib.rs               comandos de banco + registro de TODOS os comandos + setup (migração) + limpeza ao fechar
   src/store.rs             conexões e documentos JSON na pasta de configuração; migração do nome antigo
   src/db/{mod,pg,my}.rs    sessões de banco (Postgres/MySQL), metadados, DDL, diagrama, execução, cancelamento
+  src/airflow/             plugin Airflow: client.rs (HTTP /api/v2, JWT, erros, paginação), secrets.rs (cofre do sistema), mod.rs (comandos)
   src/db/ext.rs            drivers sob demanda: venv privado, pip install no primeiro uso, ExtConn (JSON por linha via stdio)
   src/db/drivers/rits_driver.py  o "driver host" Python (SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB)
   src/tools.rs             backup/restore: monta argumentos, localiza binários, transmite o log
@@ -161,7 +166,7 @@ src-tauri/
   src/procs.rs             processos (texto ou JSON-RPC), TCP para DAP, PTY, capture, which, PATH aumentado
   tests/                   veja a seção 3
 assets/logo.svg            ícone do app: a marca sobre o quadrado escuro arredondado (grade de ícone do macOS)
-assets/logo-mark.svg       só a marca, sem fundo (o "R" em forma de grafo de pipeline; o nó verde #6DB58F é a saída)
+assets/logo-mark.svg       só a marca, sem fundo: um "R" sólido e inclinado, lilás #A08CFF (fundo do ícone #111214)
                            gere os ícones com: npx tauri icon assets/logo.svg -o src-tauri/icons
                            e apague as pastas android/ e ios/ que o comando cria (o app é só desktop);
                            a versão de 20 px usada na interface é o "logo" em src/icons.ts
@@ -251,6 +256,20 @@ Na pasta de configuração `%APPDATA%\dev.rits.ide\` ficam:
 - `history.json`: histórico SQL; `recentProjects.json`: projetos recentes; `project-<…>.json`: `ProjectSettings` de cada projeto (layout, arquivos abertos, breakpoints, configurações de execução, interpretador, pastas expandidas, consoles).
 
 Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no `localStorage`; sempre envolva o acesso em `try/catch`. Quando o app se chamava "Beaver Grip", o identificador era `dev.beavergrip.app`; `store::migrate_legacy` copia esses arquivos uma única vez.
+
+
+### 5.9 Plugin Apache Airflow
+Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `localStorage` `plugin.airflow`. O `Workbench.syncPlugins()` carrega `airflow/panel.ts` por `import()` dinâmico (chunk separado do Vite) e chama `dispose()` ao desativar: cancela requisições, para o polling, fecha as abas e chama `airflow_release`, que descarta tokens e clientes HTTP. Instâncias externas e o ambiente Docker continuam rodando.
+
+- **Só a API pública do Airflow 3** (`/api/v2`), conferida contra o OpenAPI da 3.3.2. O `check_path` recusa qualquer caminho fora de `/api/v2/` (nada de `/ui`, scraping ou banco de metadados). Airflow 2 (`/api/v1`) é detectado e recusado com mensagem clara.
+- **Chamadas pelo backend** (`airflow_request`, `airflow_get_all`): o frontend nunca vê senhas nem tokens, e não há CORS. Autenticação: `password` (POST `/auth/token` → JWT, cache até 60 s antes do `exp`, novo login automático), `token` (bearer colado pelo usuário) ou `none`. TLS validado por padrão (desligar é opção explícita, com aviso).
+- **Segredos**: `airflow/secrets.rs` usa o cofre do sistema (`keyring`: Keychain no macOS, Credential Manager no Windows), com as chaves `airflow:<id>` e `airflow-env:<slug>:{admin,jwt,fernet}`. O documento `airflow-instances` guarda só nome, URL, usuário, timeout e TLS. As senhas das conexões de banco **ainda não** usam esse cofre.
+- **Repetição**: a única repetição automática é um novo login depois de um 401 (o servidor recusou, nada rodou). Timeout e 5xx nunca são repetidos, e o botão de disparar fica desabilitado até a resposta. A limpeza de tarefas sempre roda primeiro com `dry_run: true` para mostrar o alcance.
+- **Polling** (`panel.ts`, `dagTab.ts`): a lista a cada 20 s só com a janela visível, dobrando até 160 s em erros consecutivos; execuções e logs a cada 3 s só enquanto não terminaram e a aba está ativa. Logs usam `full_content` e o `content` estruturado (`::group::`).
+- **Ambiente local** (`env.ts` + `airflow_env_*`): compose gerado de `composeFor()`, baseado no oficial da 3.3.2 (CeleryExecutor → LocalExecutor, sem Redis/worker), com imagens fixadas (`apache/airflow:3.3.2`, `postgres:16.15`), porta só em `127.0.0.1`, FabAuthManager com senha aleatória (sem acesso anônimo) e rótulos `dev.rits.plugin=airflow`. O compose fica na pasta de configuração (`airflow-envs/<slug>/`), fora do projeto e do Git. `airflow_env_compose` injeta os segredos como variáveis de ambiente e só aceita `up/down/stop/start/restart/ps/logs/pull` (nunca `config`, que imprimiria os segredos); `down -v` exige a flag de confirmação, que a UI só envia depois de o usuário digitar o nome do ambiente. Parar preserva os volumes. Depois do `up`, a IDE espera o `/api/v2/monitor/health` e cadastra a instância sozinha.
+- **Projeto** (`project.ts`, `ProjectSettings.airflow`): instância, pasta de DAGs e forma de entrega (`volume`, `git` ou `manual`). A API não recebe arquivos. Ao salvar um `.py` da pasta de DAGs, a IDE acompanha o processamento (`last_parsed_time` e `importErrors`) e avisa quando a DAG foi processada ou deu erro; no modo Git, lembra de publicar com commit e push. O arquivo local de uma DAG vem do `relative_fileloc`. Para o autocomplete, `installSdk()` instala `apache-airflow-task-sdk==TASK_SDK_VERSION` (`env.ts`, a versão que o `apache-airflow` 3.3.2 exige) no interpretador do projeto, só quando o usuário aceita (sugerido uma vez por sessão, ao criar uma DAG ou associar o projeto), e reinicia o LSP de Python. Ao subir a versão do Airflow, atualize `AIRFLOW_VERSION` e `TASK_SDK_VERSION` juntos.
+- **Painel web** (`web.ts`): a UI oficial abre numa janela separada (`airflow-web-*`, fora das capabilities da IDE, sem acesso a comandos) ou no navegador do sistema. Login e navegação foram validados; as funções principais usam a API nativa.
+- **Teste real**: suba um Airflow 3 (por exemplo, o ambiente local da IDE), coloque `rits_smoke.py` e `rits_quebrada.py` (veja o cabeçalho de `tests/airflow_live.rs`) na pasta de DAGs e rode `RITS_AIRFLOW_URL=http://127.0.0.1:8080 RITS_AIRFLOW_PASSWORD=... cargo test --test airflow_live -- --ignored`.
 
 ---
 

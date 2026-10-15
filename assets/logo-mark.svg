@@ -1,12 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="270 125 432 574" width="432" height="574">
-  <!-- Rits mark: an "R" drawn as a small pipeline graph (nodes and edges); the green node is the output. -->
-  <g fill="none" stroke="#F0F0F0" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M330 638V185H485a113.5 113.5 0 0 1 0 227H330M485 412L641 638"/>
-  </g>
-  <g fill="#F0F0F0">
-    <circle cx="330" cy="185" r="53"/>
-    <circle cx="485" cy="412" r="53"/>
-    <circle cx="330" cy="638" r="53"/>
-  </g>
-  <circle cx="641" cy="638" r="53" fill="#6DB58F"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="103 66 180 237" width="180" height="237">
+  <!-- Rits mark: a solid, slanted "R" (top and bottom edges share the same ~9° slope). -->
+  <path d="M111 74L275 100V218L229 211L268 295L229 289L188.5 201.8L158 197V275L111 268ZM159 126L217 135V170L159 161Z" fill="#A08CFF" fill-rule="evenodd"/>
 </svg>

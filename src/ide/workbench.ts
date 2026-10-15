@@ -21,6 +21,7 @@ import { Problems } from "./problems";
 import { Structure } from "./structure";
 import { DbTools } from "./dbtools";
 import { DockerTools, dockerEnabled } from "./docker";
+import { airflowEnabled, loadAirflow, type AirflowHandle } from "./airflow/plugin";
 import { searchEverywhere, findInFiles, gotoLine, recentFiles, fileStructurePopup } from "./search";
 import { openSettings } from "./settings";
 import { openCloneDialog, openNewProjectDialog } from "./welcome";
@@ -78,6 +79,9 @@ export class Workbench {
   structure!: Structure;
   db!: DbTools;
   docker: DockerTools | null = null;
+  /** Airflow plugin, loaded on demand (its code lives in a separate chunk). */
+  airflow: AirflowHandle | null = null;
+  private airflowLoading: Promise<void> | null = null;
 
   private toolWindows = new Map<string, ToolWindow>();
   private visible: Partial<Record<Anchor, string>> = {};
@@ -224,6 +228,20 @@ export class Workbench {
     else if (!dockerEnabled() && this.docker) {
       this.docker.dispose();
       this.docker = null;
+    }
+    if (airflowEnabled() && !this.airflow && !this.airflowLoading) {
+      this.airflowLoading = loadAirflow(this)
+        .then((a) => {
+          this.airflow = a;
+          // disabled while loading
+          if (!airflowEnabled()) this.syncPlugins();
+        })
+        .catch((e) => console.error("airflow", e))
+        .finally(() => (this.airflowLoading = null));
+    } else if (!airflowEnabled() && this.airflow) {
+      const a = this.airflow;
+      this.airflow = null;
+      a.dispose();
     }
   }
 

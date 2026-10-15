@@ -65,6 +65,19 @@ Tudo com o visual das IDEs JetBrains (tema *Islands*) e, no macOS, com o **Liqui
 - **Git** completo: commit, push/pull, branches, log, diff lado a lado.
 - Terminal real (PTY) com o venv do projeto ativado.
 
+### Apache Airflow (plugin)
+
+- Conexão nativa com a **API pública do Airflow 3** (`/api/v2`), sem painel web embutido nem scraping. Suporta várias instâncias locais ou remotas, com teste de conexão e detecção de versão.
+- **DAGs** com busca, filtro por tags e estado, pausar e reativar, e disparar com configuração JSON.
+- **Execuções**: histórico, grafo de tarefas colorido pelo estado, **logs ao vivo** por tentativa e reexecução de tarefas mostrando antes o que será afetado.
+- **Erros de importação** das DAGs, com atalho para o arquivo local.
+- **Ambiente local com Docker** em um clique: Airflow 3.3.2 com Postgres, porta só em localhost, usuário com senha aleatória e cadastro automático na IDE. É **só para desenvolvimento**.
+- **Projeto ↔ Airflow**: nova DAG a partir de modelo, pasta de DAGs montada no ambiente local ou publicada pelo seu fluxo Git, e aviso de quando o Airflow processou o arquivo salvo.
+- **Autocomplete das DAGs**: a IDE oferece instalar o `apache-airflow-task-sdk` (a versão do Airflow 3.3.2) no interpretador do projeto, de preferência um `.venv`, para o editor conhecer o `airflow.sdk`.
+- Senhas e tokens ficam no **cofre do sistema** (Keychain / Credential Manager), e as chamadas passam pelo backend da IDE com TLS validado.
+
+Limitações: requer Airflow 3 (o Airflow 2 é detectado e recusado); o ambiente local precisa do Docker com cerca de 4 GB de RAM e baixa ~3,2 GB de imagens na primeira vez; o painel web oficial abre numa janela separada ou no navegador.
+
 ### Infraestrutura
 
 - **Docker**: gerenciador de containers (plugin opcional), com containers agrupados por projeto do Compose, iniciar/parar/reiniciar, logs, shell no container, CPU e memória ao vivo, imagens e volumes.
@@ -98,7 +111,7 @@ brew install python go libpq mysql-client
 ## Primeiros passos
 
 1. **Abra uma pasta** ou crie um projeto (Python com `.venv`, Go com `go mod init`, ou vazio).
-2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC) ou Docker.
+2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC), Docker ou Apache Airflow.
 3. **Conecte um banco**: abra a janela Database (Alt+2, ou ⌥2 no Mac), clique em **+**, escolha o banco e preencha a conexão.
 4. **Veja o modelo**: clique direito no schema › **Diagrama ER**.
 5. **Suba a infra**: crie um `compose.yaml` em Novo › docker-compose.yml e clique em **Subir** na barra do editor.

@@ -90,6 +90,7 @@ function actions(wb: Workbench): { label: string; icon: string; run: () => void;
     { label: "Restaurar banco de dados", icon: "restore", run: () => wb.db.restore() },
     { label: "Configurações", icon: "general/settings", shortcut: "Ctrl+Alt+S", run: () => openSettings(wb) },
     { label: "Plugins", icon: "plugins", run: () => openSettings(wb, "plugins") },
+    ...(wb.airflow ? [{ label: "Airflow: DAGs", icon: "airflow", run: () => wb.show("airflow", true) }, { label: "Airflow: nova DAG", icon: "airflow", run: () => wb.airflow!.newDag() }] : [{ label: "Instalar plugin Apache Airflow", icon: "airflow", run: () => openSettings(wb, "plugins", "airflow") }]),
     ...(wb.docker ? [{ label: "Docker: containers", icon: "docker", run: () => wb.show("docker", true) }] : [{ label: "Instalar plugin Docker", icon: "docker", run: () => openSettings(wb, "plugins", "docker") }]),
     { label: "Interpretador Python", icon: "python/pythonClosed", run: () => openSettings(wb, "python") },
     { label: "Inspecionar código", icon: "general/inspections", run: () => wb.problems.inspectProject() },
