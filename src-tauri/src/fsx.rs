@@ -163,6 +163,21 @@ pub fn delete(paths: &[String]) -> Result<(), String> {
     to_trash(paths)
 }
 
+/// Permanent deletion, only after the user explicitly confirmed it (used when the volume has no
+/// trash, e.g. some cloud-synced folders and network shares).
+pub fn delete_permanently(paths: &[String]) -> Result<(), String> {
+    for p in paths {
+        let path = Path::new(p);
+        let meta = std::fs::symlink_metadata(path).map_err(|e| format!("{p}: {e}"))?;
+        if meta.is_dir() {
+            std::fs::remove_dir_all(path).map_err(|e| format!("{p}: {e}"))?;
+        } else {
+            std::fs::remove_file(path).map_err(|e| format!("{p}: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
 pub fn copy_into(src: &str, dest_dir: &str) -> Result<String, String> {
     let s = Path::new(src);
     let name = s.file_name().ok_or("caminho inválido")?.to_string_lossy().to_string();

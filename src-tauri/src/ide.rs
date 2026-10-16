@@ -37,6 +37,11 @@ pub fn fs_delete(paths: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn fs_delete_permanently(paths: Vec<String>) -> Result<(), String> {
+    fsx::delete_permanently(&paths)
+}
+
+#[tauri::command]
 pub fn fs_copy(src: String, dest_dir: String) -> Result<String, String> {
     fsx::copy_into(&src, &dest_dir)
 }

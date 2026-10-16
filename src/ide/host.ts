@@ -56,6 +56,7 @@ export const host = {
   create: (path: string, dir: boolean) => invoke<void>("fs_create", { path, dir }),
   rename: (from: string, to: string) => invoke<void>("fs_rename", { from, to }),
   remove: (paths: string[]) => invoke<void>("fs_delete", { paths }),
+  removePermanently: (paths: string[]) => invoke<void>("fs_delete_permanently", { paths }),
   copy: (src: string, destDir: string) => invoke<string>("fs_copy", { src, destDir }),
   exists: (path: string) => invoke<boolean>("fs_exists", { path }),
   files: (root: string) => invoke<string[]>("fs_files", { root }),

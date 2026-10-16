@@ -344,6 +344,7 @@ pub fn run() {
             ide::fs_create,
             ide::fs_rename,
             ide::fs_delete,
+            ide::fs_delete_permanently,
             ide::fs_copy,
             ide::fs_exists,
             ide::fs_files,

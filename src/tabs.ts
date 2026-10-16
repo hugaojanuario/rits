@@ -145,6 +145,9 @@ export class TabManager {
             "button.tab-close",
             {
               title: "Fechar (Ctrl+F4)",
+              // The tab activates on mousedown and redraws the bar: if that reached the tab, this
+              // button would be replaced before the click completes and the tab would never close.
+              onmousedown: (e: MouseEvent) => e.stopPropagation(),
               onclick: (e: MouseEvent) => {
                 e.stopPropagation();
                 this.close(t);

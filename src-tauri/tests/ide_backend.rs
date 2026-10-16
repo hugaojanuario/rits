@@ -212,3 +212,18 @@ fn rename_and_trash() {
     assert!(!dir.join("b.txt").exists() && !dir.join("pasta2").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn permanent_delete() {
+    let dir = std::env::temp_dir().join(format!("rits-perm-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("p/q")).unwrap();
+    std::fs::write(dir.join("p/q/a.txt"), "x").unwrap();
+    std::fs::write(dir.join("b.txt"), "y").unwrap();
+    let s = |p: &str| dir.join(p).to_string_lossy().into_owned();
+    fsx::delete_permanently(&[s("p"), s("b.txt")]).unwrap();
+    assert!(!dir.join("p").exists() && !dir.join("b.txt").exists());
+    assert!(fsx::delete_permanently(&[s("nada")]).is_err());
+    // a path that cannot go to the trash reports why (instead of failing silently)
+    assert!(fsx::delete(&[s("nada")]).unwrap_err().contains("Lixeira"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

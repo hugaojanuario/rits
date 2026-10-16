@@ -1,7 +1,7 @@
 // "Project" tool window: lazy file tree with VCS colors, file operations and drag & drop.
 import { h } from "../util";
 import { icon, fileIconName } from "../icons";
-import { confirmDialog, contextMenu, modal, button, toast, type MenuItem } from "../ui";
+import { confirmDialog, contextMenu, modal, button, notify, toast, type MenuItem } from "../ui";
 import { host, IS_MAC, P, REVEAL_LABEL, type Entry } from "./host";
 import { infraActions, infraKind, INFRA_ICON, INFRA_LABEL, INFRA_TEMPLATES, type InfraTemplate } from "./infra";
 import type { Workbench } from "./workbench";
@@ -494,16 +494,25 @@ export class ProjectView {
   }
 
   private async delete(n: Node) {
-    const ok = await confirmDialog("Excluir", `Mover "${n.name}"${n.dir ? " e todo o conteúdo" : ""} para a Lixeira?`, "Excluir", true);
+    const what = `"${n.name}"${n.dir ? " e todo o conteúdo" : ""}`;
+    const ok = await confirmDialog("Excluir", `Mover ${what} para a Lixeira?`, "Excluir", true);
     if (!ok) return;
+    this.wb.editors.closeDeleted([n.path]);
     try {
-      this.wb.editors.closeDeleted([n.path]);
       await host.remove([n.path]);
-      if (n.parent) await this.load(n.parent);
-      this.render();
     } catch (e) {
-      toast(String(e), "error");
+      // Some volumes have no trash (cloud-synced folders such as OneDrive, network shares):
+      // say why and offer a permanent deletion, only with an explicit confirmation.
+      const again = await confirmDialog("Não foi possível mover para a Lixeira", `${String(e).replace(/^Não foi possível mover para a Lixeira: /, "")}\n\nExcluir ${what} definitivamente? Isso não pode ser desfeito.`, "Excluir definitivamente", true);
+      if (!again) return;
+      try {
+        await host.removePermanently([n.path]);
+      } catch (e2) {
+        return notify("Falha ao excluir", String(e2), "error");
+      }
     }
+    if (n.parent) await this.load(n.parent);
+    this.render();
   }
 
   private async move(src: string, destDir: string) {
