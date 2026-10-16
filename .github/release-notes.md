@@ -1,10 +1,11 @@
-O Rits reúne código Python e Go, bancos de dados e infraestrutura em uma IDE leve. A versão 0.4.0 traz três plugins opcionais para engenharia de dados, ativados em Configurações › Plugins e carregados só quando ativos.
+O Rits reúne código Python e Go, bancos de dados e infraestrutura em uma IDE leve. A versão 0.4.1 corrige problemas da 0.4.0:
 
-- **Jupyter**: notebooks `.ipynb` no editor da IDE, com células Python e Markdown, execução por kernel de um Jupyter Server (local, remoto ou JupyterLab criado no Docker), tabelas, imagens, gráficos e erros, interrupção e reinício do kernel, confiança de notebooks e saídas ativas isoladas. Validado com Jupyter Server 2.21.1 / JupyterLab 4.6.4.
-- **dbt**: projetos dbt Core com `debug`, `deps`, `parse`, `compile`, `run`, `test`, `build` e documentação; seleção estruturada, prévia do alcance antes de alterar o banco, logs ao vivo, resultados, linhagem, SQL compilado, navegação por `ref()`/`source()` e perfis PostgreSQL sem senhas no repositório. Validado com dbt Core 1.12.6 e dbt-postgres 1.11.0.
-- **Migration Audit**: auditoria determinística de conversões de dados entre bancos — descoberta estrutural, mapeamento confirmado, baseline imutável, reconciliação por unidade (volume, identidade, campos e relacionamentos) e relatórios HTML/CSV com evidências e limitações. Validado com PostgreSQL 17, MySQL 8.4, MariaDB 11.8, SQL Server 2022 e Firebird 5.
-
-Tokens e senhas dos novos plugins ficam no cofre do sistema (Keychain / Credential Manager).
+- A faixa de janelas de ferramentas mostra um botão ⋮ com as janelas que não cabem (antes elas sumiam com muitos plugins ativos).
+- O X de um notebook com alterações não salvas volta a fechar a aba, e notebooks não aparecem mais como modificados ao abrir.
+- Nomes de arquivos e pastas não são mais autocorrigidos nem capitalizados pelo macOS.
+- Renomear arquivos e pastas abre um diálogo e funciona também ao trocar só maiúsculas/minúsculas.
+- Excluir para a Lixeira funciona no macOS sem permissão de automação; ⌘⌫ exclui e F2 renomeia na árvore do projeto.
+- No macOS com Liquid Glass, o submenu "Novo" não fica mais escuro e ilegível.
 
 Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64** ou `Rits-macos-arm64.dmg` para **Mac Apple Silicon**. O arquivo `SHA256SUMS.txt` contém os hashes dos dois instaladores.
 
