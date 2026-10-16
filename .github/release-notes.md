@@ -1,11 +1,9 @@
-O Rits reúne código Python e Go, bancos de dados e infraestrutura em uma IDE leve. A versão 0.4.1 corrige problemas da 0.4.0:
+O Rits reúne código Python e Go, bancos de dados e infraestrutura em uma IDE leve. A versão 0.4.2 corrige:
 
-- A faixa de janelas de ferramentas mostra um botão ⋮ com as janelas que não cabem (antes elas sumiam com muitos plugins ativos).
-- O X de um notebook com alterações não salvas volta a fechar a aba, e notebooks não aparecem mais como modificados ao abrir.
-- Nomes de arquivos e pastas não são mais autocorrigidos nem capitalizados pelo macOS.
-- Renomear arquivos e pastas abre um diálogo e funciona também ao trocar só maiúsculas/minúsculas.
-- Excluir para a Lixeira funciona no macOS sem permissão de automação; ⌘⌫ exclui e F2 renomeia na árvore do projeto.
-- No macOS com Liquid Glass, o submenu "Novo" não fica mais escuro e ilegível.
+- O X das abas abertas volta a fechar a aba.
+- Excluir arquivos e pastas em locais sem Lixeira (como pastas do OneDrive ou compartilhamentos de rede): a IDE mostra o motivo e oferece excluir definitivamente, só com sua confirmação.
+
+Da 0.4.1: botão ⋮ na faixa de janelas, nomes sem autocorreção, renomear por diálogo, ⌘⌫ e F2 na árvore e submenu "Novo" legível no Liquid Glass.
 
 Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64** ou `Rits-macos-arm64.dmg` para **Mac Apple Silicon**. O arquivo `SHA256SUMS.txt` contém os hashes dos dois instaladores.
 
