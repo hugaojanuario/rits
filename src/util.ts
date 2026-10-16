@@ -13,6 +13,14 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   const [name, ...classes] = tag.split(".");
   const el = document.createElement(name as K);
   if (classes.length) el.className = classes.join(" ");
+  if (name === "input" || name === "textarea") {
+    // macOS WebKit autocorrects and capitalizes typed text (file names, identifiers, SQL) even with
+    // spellcheck off; none of the IDE's fields want that.
+    el.setAttribute("autocorrect", "off");
+    el.setAttribute("autocapitalize", "off");
+    el.setAttribute("autocomplete", "off");
+    if (name === "input") el.setAttribute("spellcheck", "false");
+  }
   if (attrs) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === undefined || v === null || v === false) continue;

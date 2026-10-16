@@ -1573,8 +1573,10 @@ body.resizing-x *, body.resizing-y * { pointer-events: none; }
 .glass .menu-item:hover::before, .glass .menu-item.kbd-active::before,
 .glass .popup-item:hover::before, .glass .popup-item.active::before { background: var(--accent); }
 .glass .menu-item:hover, .glass .menu-item.kbd-active, .glass .popup-item:hover, .glass .popup-item.active { color: var(--on-accent); }
-.glass .menu-item:hover .ic, .glass .menu-item.kbd-active .ic, .glass .popup-item:hover .ic, .glass .popup-item.active .ic { filter: var(--on-accent-icon); }
-.glass .menu-item:hover .menu-key, .glass .popup-item:hover .detail, .glass .popup-item.active .detail,
+.glass .menu-item:hover > .ic, .glass .menu-item.kbd-active > .ic, .glass .popup-item:hover .ic, .glass .popup-item.active .ic { filter: var(--on-accent-icon); }
+/* a submenu lives inside its parent item: the parent's highlight must not reach its items */
+.glass .menu-item:hover > .submenu { color: var(--fg); }
+.glass .menu-item:hover > .menu-key, .glass .popup-item:hover .detail, .glass .popup-item.active .detail,
 .glass .popup-item:hover .pi-sub, .glass .popup-item.active .pi-sub, .glass .popup-item:hover .pi-right, .glass .popup-item.active .pi-right { color: var(--on-accent); opacity: 0.75; }
 .glass .menu-sep, .glass .popup-sep { height: 0.5px; }
 

@@ -2,7 +2,7 @@
 import { h } from "../util";
 import { icon, fileIconName } from "../icons";
 import { confirmDialog, contextMenu, modal, button, toast, type MenuItem } from "../ui";
-import { host, P, REVEAL_LABEL, type Entry } from "./host";
+import { host, IS_MAC, P, REVEAL_LABEL, type Entry } from "./host";
 import { infraActions, infraKind, INFRA_ICON, INFRA_LABEL, INFRA_TEMPLATES, type InfraTemplate } from "./infra";
 import type { Workbench } from "./workbench";
 
@@ -22,7 +22,6 @@ export class ProjectView {
   private root: Node;
   private selected: Node | null = null;
   private expanded: Set<string>;
-  private renameEl: { node: Node; input: HTMLInputElement } | null = null;
 
   constructor(private wb: Workbench) {
     this.root = { path: wb.root, name: wb.name, dir: true, ignored: false, expanded: true };
@@ -139,9 +138,6 @@ export class ProjectView {
         h("span.tree-label", { style: n === this.root ? "font-weight:600" : "" }, n.name),
         n === this.root ? h("span.tree-detail", null, P.win(n.path).replace(P.win(this.wb.env.home), "~")) : null,
       );
-      if (this.renameEl?.node === n) {
-        row.querySelector(".tree-label")!.replaceWith(this.renameEl.input);
-      }
       row.addEventListener("mousedown", () => this.select(n));
       row.addEventListener("dblclick", () => (n.dir ? this.toggle(n) : this.open(n)));
       row.addEventListener("contextmenu", (e) => {
@@ -174,7 +170,6 @@ export class ProjectView {
       return row;
     });
     this.el.replaceChildren(...rows);
-    if (this.renameEl) setTimeout(() => this.renameEl?.input.focus());
   }
 
   private folderIcon(n: Node) {
@@ -290,7 +285,6 @@ export class ProjectView {
   }
 
   private onKey(e: KeyboardEvent) {
-    if (this.renameEl) return;
     const rows = this.visibleRows().map((r) => r.n);
     const i = this.selected ? rows.indexOf(this.selected) : -1;
     const n = this.selected;
@@ -305,8 +299,9 @@ export class ProjectView {
     else if (e.key === "ArrowLeft" && n) n.dir && n.expanded ? this.toggle(n) : n.parent && this.select(n.parent);
     else if (e.key === "Enter" && n) n.dir ? this.toggle(n) : this.open(n);
     else if (e.key === "F4" && n && !n.dir) this.open(n);
-    else if (e.key === "Delete" && n && n !== this.root) this.delete(n);
-    else if (e.key === "F6" && e.shiftKey && n && n !== this.root) this.startRename(n);
+    // Mac keyboards have no Delete key: ⌘⌫ deletes, like Finder and VS Code
+    else if ((e.key === "Delete" || (e.key === "Backspace" && (e.metaKey || e.ctrlKey))) && n && n !== this.root) this.delete(n);
+    else if (((e.key === "F6" && e.shiftKey) || e.key === "F2") && n && n !== this.root) this.startRename(n);
     else if (e.key === "Insert" && e.altKey) this.newFileAt(n ? (n.dir ? n.path : P.dir(n.path)) : null);
     else if (e.key === "c" && e.ctrlKey && e.shiftKey && n) navigator.clipboard.writeText(P.win(n.path));
     else return;
@@ -346,7 +341,7 @@ export class ProjectView {
       { label: "Colar", icon: "general/paste", disabled: !clip, action: () => this.paste(dir) },
       { separator: true },
       { label: "Renomear…", shortcut: "Shift+F6", disabled: n === this.root, action: () => this.startRename(n) },
-      { label: "Excluir…", icon: "general/delete", shortcut: "Delete", disabled: n === this.root, action: () => this.delete(n) },
+      { label: "Excluir…", icon: "general/delete", shortcut: IS_MAC ? "Ctrl+Backspace" : "Delete", disabled: n === this.root, action: () => this.delete(n) },
       { separator: true },
     ];
     const ik = n.dir ? null : infraKind(n.path, /\.ya?ml$/i.test(n.name) ? this.infraText.get(n.path.toLowerCase()) : undefined);
@@ -466,40 +461,36 @@ export class ProjectView {
     }
   }
 
+  /** Rename in a dialog: an input inside the (draggable, re-rendered) tree row lost the focus and
+   *  ended the edit before anything was typed. */
   private startRename(n: Node) {
-    const input = h("input.tree-rename", { value: n.name, spellcheck: false }) as HTMLInputElement;
-    this.renameEl = { node: n, input };
-    let done = false;
-    const finish = async (ok: boolean) => {
-      if (done) return;
-      done = true;
-      this.renameEl = null;
+    const m = modal(n.dir ? "Renomear pasta" : "Renomear arquivo", { width: 420, onClose: () => this.el.focus() });
+    const input = h("input.input", { value: n.name }) as HTMLInputElement;
+    const submit = async () => {
       const name = input.value.trim();
-      if (ok && name && name !== n.name) {
-        const to = P.join(P.dir(n.path), name);
-        try {
-          await this.wb.editors.saveAll();
-          await host.rename(n.path, to);
-          await this.wb.editors.renamed(n.path, to);
-          if (n.parent) await this.load(n.parent);
-          this.selected = null;
-          await this.reveal(to);
-        } catch (e) {
-          toast(String(e), "error");
-        }
+      if (!name || name === n.name) return m.close();
+      if (/[\\/]/.test(name)) return toast("O nome não pode conter / ou \\.", "error");
+      const to = P.join(P.dir(n.path), name);
+      m.close();
+      try {
+        await this.wb.editors.saveAll();
+        await host.rename(n.path, to);
+        await this.wb.editors.renamed(n.path, to);
+        if (n.parent) await this.load(n.parent);
+        this.selected = null;
+        await this.reveal(to);
+      } catch (e) {
+        toast(String(e), "error");
       }
-      this.render();
-      this.el.focus();
     };
-    input.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Enter") finish(true);
-      if (e.key === "Escape") finish(false);
-    });
-    input.addEventListener("blur", () => finish(true));
-    this.render();
+    input.addEventListener("keydown", (e) => e.key === "Enter" && submit());
+    m.body.append(h("label.field", null, h("span", null, "Novo nome"), input));
+    m.footer.append(button("Cancelar", () => m.close()), button("Renomear", submit, "primary"));
     const dot = n.dir ? -1 : n.name.lastIndexOf(".");
-    setTimeout(() => input.setSelectionRange(0, dot > 0 ? dot : n.name.length));
+    setTimeout(() => {
+      input.focus();
+      input.setSelectionRange(0, dot > 0 ? dot : n.name.length);
+    });
   }
 
   private async delete(n: Node) {

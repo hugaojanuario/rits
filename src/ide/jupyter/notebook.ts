@@ -135,6 +135,8 @@ export class NotebookTab {
     if (!this.cells.length) this.insert(0, "code");
     this.renderList();
     this.renderBar();
+    // compare against the normalized form (sources as lines, sorted keys), not the raw file text
+    if (text.trim()) this.savedText = this.syncModel();
     this.markDirty();
     return true;
   }
@@ -199,19 +201,24 @@ export class NotebookTab {
   private async confirmClose(): Promise<boolean> {
     if (!this.dirty) return true;
     return new Promise((resolve) => {
-      const m = modal("Alterações não salvas", { width: 460, onClose: () => resolve(false) });
+      let decided = false;
+      const decide = (v: boolean) => {
+        decided = true;
+        resolve(v);
+      };
+      const m = modal("Alterações não salvas", { width: 460, onClose: () => !decided && resolve(false) });
       m.body.append(h("div", null, `Salvar as alterações em ${P.base(this.storage.path)} antes de fechar?`));
       m.footer.append(
         button("Cancelar", () => m.close()),
         button("Descartar", () => {
           this.dirtyFlag = false;
+          decide(true);
           m.close();
-          resolve(true);
         }, "danger"),
         button("Salvar", async () => {
           const ok = await this.save();
+          decide(ok);
           m.close();
-          resolve(ok);
         }, "primary"),
       );
     });

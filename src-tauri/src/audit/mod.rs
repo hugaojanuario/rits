@@ -173,7 +173,7 @@ pub fn audit_save_mappings(app: AppHandle, id: String, mut mappings: Mappings) -
 pub fn audit_delete_project(app: AppHandle, id: String) -> Result<(), String> {
     let d = layout(&app)?.project(&id)?;
     if d.exists() {
-        trash::delete(&d).or_else(|_| std::fs::remove_dir_all(&d)).map_err(|e| e.to_string())?;
+        crate::fsx::to_trash(&[&d]).or_else(|_| std::fs::remove_dir_all(&d).map_err(|e| e.to_string())).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -183,7 +183,7 @@ pub fn audit_delete_artifact(app: AppHandle, project_id: String, kind: String, i
     let l = layout(&app)?;
     let d = if kind == "baseline" { l.baseline(&project_id, &id)? } else { l.run(&project_id, &id)? };
     if d.exists() {
-        trash::delete(&d).or_else(|_| std::fs::remove_dir_all(&d)).map_err(|e| e.to_string())?;
+        crate::fsx::to_trash(&[&d]).or_else(|_| std::fs::remove_dir_all(&d).map_err(|e| e.to_string())).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -469,7 +469,7 @@ pub async fn audit_reconcile(app: AppHandle, window: tauri::Window, st: State<'_
             all.sort();
             while all.len() > p.perf.retention {
                 let old = all.remove(0);
-                let _ = trash::delete(&old).or_else(|_| std::fs::remove_dir_all(&old));
+                let _ = crate::fsx::to_trash(&[&old]).or_else(|_| std::fs::remove_dir_all(&old).map_err(|e| e.to_string()));
             }
         }
     }

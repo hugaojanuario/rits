@@ -130,15 +130,37 @@ pub fn create(path: &str, dir: bool) -> Result<(), String> {
 }
 
 pub fn rename(from: &str, to: &str) -> Result<(), String> {
-    if Path::new(to).exists() {
+    if !Path::new(from).exists() {
+        return Err(format!("{from} não existe mais"));
+    }
+    // On case-insensitive file systems (macOS, Windows) "a.txt" -> "A.txt" points to the same
+    // file: that is a rename, not a collision.
+    let same = match (std::fs::canonicalize(from), std::fs::canonicalize(to)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    };
+    if Path::new(to).exists() && !same {
         return Err("Já existe um arquivo com esse nome".into());
     }
     std::fs::rename(from, to).map_err(|e| e.to_string())
 }
 
-/// Moves to the recycle bin instead of deleting permanently.
+/// Moves to the recycle bin instead of deleting permanently. On macOS the file manager API is
+/// used: the default (asking Finder through AppleScript) needs an automation permission that an
+/// ad-hoc signed app may never get, and then nothing is deleted.
+pub fn to_trash<P: AsRef<Path>>(paths: &[P]) -> Result<(), String> {
+    #[allow(unused_mut)]
+    let mut ctx = trash::TrashContext::default();
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    ctx.delete_all(paths).map_err(|e| format!("Não foi possível mover para a Lixeira: {e}"))
+}
+
 pub fn delete(paths: &[String]) -> Result<(), String> {
-    trash::delete_all(paths).map_err(|e| e.to_string())
+    to_trash(paths)
 }
 
 pub fn copy_into(src: &str, dest_dir: &str) -> Result<String, String> {

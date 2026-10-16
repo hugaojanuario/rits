@@ -190,3 +190,25 @@ async fn delve_dap_initializes_over_tcp() {
     let _ = child.kill().await;
     assert!(m.contains("\"success\":true"), "{m}");
 }
+
+#[test]
+fn rename_and_trash() {
+    let dir = std::env::temp_dir().join(format!("rits-rename-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("pasta")).unwrap();
+    let s = |p: &str| dir.join(p).to_string_lossy().into_owned();
+    std::fs::write(s("a.txt"), "x").unwrap();
+    std::fs::write(s("b.txt"), "y").unwrap();
+    fsx::rename(&s("a.txt"), &s("c.txt")).unwrap();
+    assert!(dir.join("c.txt").exists() && !dir.join("a.txt").exists());
+    // changing only the case is a rename, even on case-insensitive file systems
+    fsx::rename(&s("c.txt"), &s("C.txt")).unwrap();
+    assert!(std::fs::read_dir(&dir).unwrap().any(|e| e.unwrap().file_name() == "C.txt"));
+    // a different existing file is a collision
+    assert!(fsx::rename(&s("C.txt"), &s("b.txt")).is_err());
+    fsx::rename(&s("pasta"), &s("pasta2")).unwrap();
+    // files and folders go to the trash (no automation permission needed on macOS)
+    fsx::delete(&[s("b.txt"), s("pasta2")]).unwrap();
+    assert!(!dir.join("b.txt").exists() && !dir.join("pasta2").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
