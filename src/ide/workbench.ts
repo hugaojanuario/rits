@@ -430,6 +430,10 @@ export class Workbench {
         ),
       ),
     );
+    // Segments that do not fit go to a "⋮" overflow button at the end of the switcher.
+    const overflow = h("button.seg-btn.seg-more", { title: "Mais janelas", "aria-label": "Mais janelas de ferramentas" }, icon("general/moreVertical")) as HTMLButtonElement;
+    seg.append(overflow);
+    this.fitSegments(anchor, seg, overflow, members, tw);
     const more = h("button.icon-btn", { title: "Opções", "aria-label": "Opções", onclick: (e: MouseEvent) => this.twMenu(tw, e) }, icon("general/moreVertical"));
     const actions = tw.actions?.() ?? [];
     const head =
@@ -444,6 +448,38 @@ export class Workbench {
           );
     if (headerOnly && island.firstElementChild) island.firstElementChild.replaceWith(head);
     else island.replaceChildren(head, tw.body);
+  }
+
+  private segObservers: Partial<Record<Anchor, ResizeObserver>> = {};
+
+  /** Hides the segments that overflow the switcher (never the active one) behind the "⋮" button. */
+  private fitSegments(anchor: Anchor, seg: HTMLElement, overflow: HTMLButtonElement, members: ToolWindow[], active: ToolWindow) {
+    const btns = [...seg.querySelectorAll<HTMLElement>(".seg-btn:not(.seg-more)")];
+    const fit = () => {
+      if (!seg.isConnected) return;
+      btns.forEach((b) => (b.style.display = ""));
+      overflow.style.display = "none";
+      if (seg.scrollWidth <= seg.clientWidth + 1) return;
+      overflow.style.display = "";
+      const hidden: ToolWindow[] = [];
+      for (let i = btns.length - 1; i >= 0 && seg.scrollWidth > seg.clientWidth + 1; i--) {
+        if (members[i] === active) continue;
+        btns[i].style.display = "none";
+        hidden.unshift(members[i]);
+      }
+      overflow.classList.toggle("has-badge", hidden.some((t) => t.badge));
+      overflow.onclick = () =>
+        popupList(
+          overflow,
+          hidden.map((t) => ({ label: t.title, icon: twIcon(t.icon), right: displayShortcut(t.shortcut) || undefined, action: () => this.show(t.id, true) })),
+          { compact: true, width: 240 },
+        );
+    };
+    this.segObservers[anchor]?.disconnect();
+    const ro = new ResizeObserver(() => fit());
+    ro.observe(seg);
+    this.segObservers[anchor] = ro;
+    requestAnimationFrame(fit);
   }
 
   /** Project identity at the top of the left card: initials, name (projects popup) and the Git branch. */
