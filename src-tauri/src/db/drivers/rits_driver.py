@@ -188,6 +188,92 @@ class SqlDriver:
     def quote(n):
         return '"' + n.replace('"', '""') + '"'
 
+    # ---- Migration Audit (read-only analysis; see src-tauri/src/audit) ----
+    has_schemas = True
+
+    def audit_estimates(self, schema):
+        return {}
+
+    def audit_discover(self, schemas):
+        out = []
+        for schema in (schemas or self.schemas()):
+            try:
+                fks = self.foreign_keys(schema)
+            except Exception:
+                fks = []
+            try:
+                est = self.audit_estimates(schema)
+            except Exception:
+                est = {}
+            for name, kind, cols in self.table_columns(schema):
+                cons = []
+                pk = [c["name"] for c in cols if c["pk"]]
+                if pk:
+                    cons.append({"name": "PRIMARY", "kind": "primary", "columns": pk})
+                try:
+                    for ix in self.indexes(schema, name):
+                        if ix["unique"] and not ix["primary"]:
+                            cons.append({"name": ix["name"], "kind": "unique", "columns": [x.strip() for x in (ix["columns"] or "").split(",") if x.strip()]})
+                except Exception:
+                    pass
+                for fk in fks:
+                    if fk["table"] == name:
+                        cons.append({"name": fk["name"], "kind": "foreign", "columns": fk["columns"], "refSchema": (fk["refSchema"] or schema) if self.has_schemas else "", "refTable": fk["refTable"], "refColumns": fk["refColumns"]})
+                columns = []
+                for i, c in enumerate(cols):
+                    native = re.sub(r"\s+identity$", "", c["dataType"] or "")
+                    m = re.search(r"\((\d+)(?:\s*,\s*(\d+))?\)", native)
+                    length = precision = scale = None
+                    if m:
+                        if re.match(r"(?i)(numeric|decimal)", native):
+                            precision, scale = int(m.group(1)), int(m.group(2) or 0)
+                        else:
+                            length = int(m.group(1))
+                    columns.append({"name": c["name"], "position": i + 1, "native": native, "length": length, "precision": precision, "scale": scale, "nullable": c["nullable"], "default": c["default"], "generated": False})
+                out.append({"schema": schema if self.has_schemas else "", "name": name, "kind": kind, "columns": columns, "constraints": cons, "indexes": [], "estimatedRows": est.get(name)})
+        return out
+
+    def audit_describe(self, sql):
+        cur = self.conn.cursor()
+        try:
+            cur.execute(sql)
+            return [[d[0], ""] for d in (cur.description or [])]
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+
+    def audit_begin(self, consistency):
+        return "leitura sem garantia de snapshot"
+
+    def audit_end(self):
+        try:
+            self.conn.rollback()
+        except Exception:
+            pass
+        return True
+
+    def audit_stream(self, rid, sql, params, batch):
+        cur = self.conn.cursor()
+        n = 0
+        try:
+            cur.execute(sql, tuple(params)) if params else cur.execute(sql)
+            while True:
+                rows = cur.fetchmany(batch)
+                if not rows:
+                    break
+                n += len(rows)
+                sys.stdout.write(json.dumps({"id": rid, "rows": [[text(v) for v in r] for r in rows]}, default=str, ensure_ascii=False) + "\n")
+                sys.stdout.flush()
+            return n
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+
+
 
 class SqlServer(SqlDriver):
     def __init__(self, cfg, db):
@@ -207,6 +293,34 @@ class SqlServer(SqlDriver):
 
     def obj(self, schema, name):
         return f"{self.quote(schema)}.{self.quote(name)}"
+
+    def audit_estimates(self, schema):
+        r = self.rows(
+            """SELECT o.name, SUM(p.rows) FROM sys.partitions p JOIN sys.objects o ON o.object_id = p.object_id
+               JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE p.index_id IN (0, 1) AND s.name = %s GROUP BY o.name""",
+            (schema,),
+        )
+        return {n: int(c) for n, c in r}
+
+    def audit_begin(self, consistency):
+        if consistency == "none":
+            return "leitura sem garantia de snapshot (READ COMMITTED)"
+        st = self.rows("SELECT snapshot_isolation_state FROM sys.databases WHERE name = DB_NAME()")
+        cur = self.conn.cursor()
+        if st and st[0][0] == 1:
+            cur.execute("SET TRANSACTION ISOLATION LEVEL SNAPSHOT")
+            cur.execute("BEGIN TRANSACTION")
+            return "snapshot consistente (SNAPSHOT ISOLATION)"
+        cur.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        return "leitura sem garantia de snapshot: ALLOW_SNAPSHOT_ISOLATION está desligado neste banco"
+
+    def audit_end(self):
+        try:
+            cur = self.conn.cursor()
+            cur.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+        except Exception:
+            pass
+        return True
 
     def server_info(self):
         v, u = self.rows("SELECT @@VERSION, SUSER_SNAME()")[0]
@@ -412,6 +526,36 @@ class Firebird(SqlDriver):
             self.conn.set_autocommit(True)
         except Exception:
             pass
+
+    has_schemas = False
+
+    def audit_begin(self, consistency):
+        import firebirdsql
+
+        try:
+            self.conn.commit()
+        except Exception:
+            pass
+        if consistency == "none":
+            return "leitura sem garantia de snapshot (autocommit)"
+        try:
+            self.conn.set_autocommit(False)
+        except Exception:
+            pass
+        self.conn.isolation_level = firebirdsql.ISOLATION_LEVEL_REPEATABLE_READ
+        self.conn.begin()
+        return "snapshot consistente (transação SNAPSHOT do Firebird)"
+
+    def audit_end(self):
+        try:
+            self.conn.rollback()
+        except Exception:
+            pass
+        try:
+            self.conn.set_autocommit(True)
+        except Exception:
+            pass
+        return True
 
     def server_info(self):
         v, u = self.rows("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION'), CURRENT_USER FROM rdb$database")[0]
@@ -1048,6 +1192,16 @@ def main():
                 res = drv.ddl(req.get("schema") or "", req["name"], req.get("kind") or "table")
             elif op in ("server_info", "databases", "schemas"):
                 res = getattr(drv, op)()
+            elif op == "audit_discover":
+                res = drv.audit_discover(req.get("schemas") or [])
+            elif op == "audit_describe":
+                res = drv.audit_describe(req["sql"])
+            elif op == "audit_begin":
+                res = drv.audit_begin(req.get("consistency") or "snapshot")
+            elif op == "audit_end":
+                res = drv.audit_end()
+            elif op == "audit_stream":
+                res = drv.audit_stream(rid, req["sql"], req.get("params") or [], int(req.get("batch") or 1000))
             else:
                 raise Exception(f"operação desconhecida: {op}")
             out = {"id": rid, "ok": True, "result": res}

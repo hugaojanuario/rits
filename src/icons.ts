@@ -81,6 +81,14 @@ const custom: Record<string, string> = {
   dbMongo: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3FA45B" stroke-linejoin="round"><path d="M8 1.5c2.6 2.6 3.9 5 3.6 7.5-.3 2.4-1.7 3.8-3.6 4.6-1.9-.8-3.3-2.2-3.6-4.6C4.1 6.5 5.4 4.1 8 1.5z" fill="#3FA45B" fill-opacity=".15"/><path d="M8 4.5v10" stroke-linecap="round"/></svg>`,
   // Airflow: a four-blade pinwheel (own drawing in the style of the other icons)
   airflow: `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 8C8 5 9 2.2 11.6 1.6 12.4 4 10.6 6.6 8 8z" fill="#2B83F6"/><path d="M8 8c3 0 5.8 1 6.4 3.6C12 12.4 9.4 10.6 8 8z" fill="#E9493B"/><path d="M8 8c0 3-1 5.8-3.6 6.4C3.6 12 5.4 9.4 8 8z" fill="#21B464"/><path d="M8 8C5 8 2.2 7 1.6 4.4 4 3.6 6.6 5.4 8 8z" fill="#08C7D9"/><circle cx="8" cy="8" r="1" fill="#fff" opacity=".9"/></svg>`,
+  // Plugin icons drawn for Rits (generic shapes, not the projects' logos).
+  jupyter: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="#F37726"/><path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="#F37726" stroke-linecap="round"/><circle cx="3" cy="4.5" r=".9" fill="#F37726"/><circle cx="3" cy="8" r=".9" fill="#F37726"/><circle cx="3" cy="11.5" r=".9" fill="#F37726"/></svg>`,
+  jupyterTw: C(`<rect x="3.5" y="2" width="9" height="12" rx="1.5"/><path d="M6 5.5h4M6 8h4M6 10.5h2.5M2.5 5h2M2.5 8h2M2.5 11h2"/>`, 20),
+  notebook: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="#F37726"/><path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="#F37726" stroke-linecap="round"/></svg>`,
+  dbt: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#FF694A" stroke-linejoin="round" stroke-linecap="round"><path d="M8 1.8l5.6 3.1L8 8 2.4 4.9z" fill="#FF694A" fill-opacity=".2"/><path d="M2.4 8L8 11.1 13.6 8M2.4 11.1L8 14.2l5.6-3.1"/></svg>`,
+  dbtTw: C(`<path d="M8 1.8l5.6 3.1L8 8 2.4 4.9zM2.4 8L8 11.1 13.6 8M2.4 11.1L8 14.2l5.6-3.1"/>`, 20),
+  audit: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#548AF7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2l4 4M4.8 6.9l1.4 1.4 2.6-2.8"/></svg>`,
+  auditTw: C(`<circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2l4 4M4.8 6.9l1.4 1.4 2.6-2.8"/>`, 20),
   airflowTw: C(`<path d="M10 10c0-3.6 1.2-6.9 4.3-7.6.9 2.8-1.2 5.9-4.3 7.6zM10 10c3.6 0 6.9 1.2 7.6 4.3-2.8.9-5.9-1.2-7.6-4.3zM10 10c0 3.6-1.2 6.9-4.3 7.6-.9-2.8 1.2-5.9 4.3-7.6zM10 10c-3.6 0-6.9-1.2-7.6-4.3 2.8-.9 5.9 1.2 7.6 4.3z" transform="scale(.8)"/>`, 20),
   terraform: `<svg width="16" height="16" viewBox="0 0 16 16" fill="#8A6CE8"><path d="M5.6 2.6l4.2 2.4v4.8L5.6 7.4z"/><path d="M10.4 5v4.8l4.2-2.4V2.6z" opacity=".7"/><path d="M1.2.2l4 2.3v4.8l-4-2.3zM5.6 8.2l4.2 2.4v4.8l-4.2-2.4z"/></svg>`,
   k8s: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-linecap="round"><path d="M8 1.2l5.6 2.7 1.4 6-3.9 4.8H4.9L1 9.9l1.4-6z" fill="#3970E4" fill-opacity=".18" stroke="#3970E4" stroke-linejoin="round"/><circle cx="8" cy="8.2" r="2.1" stroke="#3970E4"/><path d="M8 3.6v2.5M8 10.3v2.4M3.7 6.6l2.3 1M10 8.8l2.3 1M4.4 11.4l2-1.8M9.6 6.8l2-1.8" stroke="#3970E4"/></svg>`,
@@ -196,7 +204,7 @@ const byExt: Record<string, string> = {
 const byName: Record<string, string> = {
   ".gitignore": "fileTypes/gitignore", ".dockerignore": "fileTypes/ignored", dockerfile: "docker", containerfile: "docker",
   "docker-compose.yml": "containerStack", "docker-compose.yaml": "containerStack", "compose.yaml": "containerStack", "compose.yml": "containerStack", ".editorconfig": "fileTypes/editorConfig", makefile: "fileTypes/config", "requirements.txt": "python/pythonPackages",
-  "pyproject.toml": "fileTypes/toml", "go.mod": "goMod", "go.sum": "goMod", license: "fileTypes/text", ".env": "fileTypes/config",
+  "dbt_project.yml": "dbt", "profiles.yml": "dbt", "pyproject.toml": "fileTypes/toml", "go.mod": "goMod", "go.sum": "goMod", license: "fileTypes/text", ".env": "fileTypes/config",
 };
 
 export function fileIconName(name: string): string {

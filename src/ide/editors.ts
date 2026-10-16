@@ -24,6 +24,7 @@ import { langFor, langExtensions, islandsTheme, type LangInfo } from "./lang";
 import { lspLangFor, type LspLang } from "./lsp";
 import { infraActions, infraKind, isK8s, INFRA_ICON, INFRA_LABEL } from "./infra";
 import { pyTool } from "./sdk";
+import { editorContributions } from "./plugins";
 import type { Workbench } from "./workbench";
 
 // ---------------- breakpoints ----------------
@@ -225,6 +226,9 @@ export class CodeEditor {
   private host_ = h("div.code-host");
   /** Quick actions for Dockerfile / Compose / Terraform / Kubernetes files. */
   private infraBar = h("div.infra-bar.hidden");
+  /** Actions contributed by optional plugins (dbt model actions...). */
+  private pluginBar = h("div.infra-bar.plugin-bar.hidden");
+  private pluginComp = new Compartment();
   private lspComp = new Compartment();
   private roComp = new Compartment();
   private saveTimer: number | undefined;
@@ -237,7 +241,7 @@ export class CodeEditor {
     this.lang = langFor(path);
     this.lspLang = lspLangFor(path);
     this.iconName = fileIconName(P.base(path));
-    this.el.append(this.infraBar, this.host_);
+    this.el.append(this.infraBar, this.pluginBar, this.host_);
     this.tab = {
       id: "file:" + path.toLowerCase(),
       title: P.base(path),
@@ -285,6 +289,7 @@ export class CodeEditor {
     this.savedText = ft.text;
     this.create(ft.text);
     this.renderInfraBar();
+    this.renderPluginBar();
     this.attachLsp();
     this.refreshVcs(true);
     return true;
@@ -367,6 +372,7 @@ export class CodeEditor {
       ...langExtensions(this.lang),
       islandsTheme,
       this.lspComp.of([]),
+      this.pluginComp.of(this.pluginExtensions()),
       this.roComp.of(EditorState.readOnly.of(false)),
       changeWatcher,
       EditorView.domEventHandlers({
@@ -487,6 +493,35 @@ export class CodeEditor {
     ];
   }
 
+  private pluginExtensions(): Extension[] {
+    return editorContributions().flatMap((c) => c.extensions?.(this.path) ?? []);
+  }
+
+  /** Plugins were enabled/disabled: refresh their extensions and action bar. */
+  refreshPlugins() {
+    this.view?.dispatch({ effects: this.pluginComp.reconfigure(this.pluginExtensions()) });
+    this.renderPluginBar();
+  }
+
+  renderPluginBar() {
+    const text = this.view?.state.doc.toString() ?? this.savedText;
+    const acts = editorContributions().flatMap((c) => c.actions?.(this.path, text) ?? []);
+    this.pluginBar.classList.toggle("hidden", !acts.length);
+    this.pluginBar.replaceChildren(...acts.map((a) => h("button.ib-btn", { title: a.title ?? a.label, onclick: () => a.run() }, icon(a.icon), a.label)));
+  }
+
+  /** Plugin definition providers (dbt ref()/source()...), tried before the language server. */
+  private async pluginDefinition(): Promise<boolean> {
+    const v = this.view;
+    if (!v) return false;
+    const text = v.state.doc.toString();
+    const pos = v.state.selection.main.head;
+    for (const c of editorContributions()) {
+      if (c.definition && (await c.definition(this.path, text, pos).catch(() => false))) return true;
+    }
+    return false;
+  }
+
   // ---------- LSP ----------
   infraKind() {
     return infraKind(this.path, this.view?.state.doc.toString() ?? this.savedText);
@@ -546,6 +581,7 @@ export class CodeEditor {
       case "complete":
         return startCompletion(v);
     }
+    if (name === "definition" && (await this.pluginDefinition())) return;
     if (!LSPPlugin.get(v)) {
       toast("Recurso disponível com o servidor de linguagem instalado (Configurações › Plugins).", "info");
       return;
@@ -920,6 +956,9 @@ export class Editors {
     window.addEventListener("rits-completion", () => {
       for (const ed of this.map.values()) ed.view?.dispatch({ effects: completionComp.reconfigure(completionExtension()) });
     });
+    window.addEventListener("rits-editor-contrib", () => {
+      for (const ed of this.map.values()) ed.refreshPlugins();
+    });
   }
 
   key(path: string) {
@@ -939,9 +978,16 @@ export class Editors {
     return t ? ([...this.map.values()].find((e) => e.tab === t) ?? null) : null;
   }
 
-  async openFile(path: string, o: { line?: number; col?: number; len?: number; background?: boolean } = {}): Promise<CodeEditor | null> {
+  /** `text`: always the text editor (e.g. "Abrir como texto" for a notebook). */
+  async openFile(path: string, o: { line?: number; col?: number; len?: number; background?: boolean; text?: boolean } = {}): Promise<CodeEditor | null> {
     path = P.norm(path);
     let ed = this.get(path);
+    if (!ed && !o.text) {
+      // plugins that open the file in their own view (notebooks...)
+      for (const c of editorContributions()) {
+        if (c.open && (await c.open(path, { background: o.background }))) return null;
+      }
+    }
     if (!ed) {
       ed = new CodeEditor(this.wb, path);
       this.map.set(this.key(path), ed);

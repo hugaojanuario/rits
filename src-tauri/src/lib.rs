@@ -1,4 +1,8 @@
 pub mod airflow;
+pub mod audit;
+pub mod jupyter;
+pub mod dbt;
+pub mod secrets;
 pub mod db;
 pub mod store;
 pub mod tools;
@@ -304,6 +308,9 @@ pub fn run() {
         .manage(procs::Procs::default())
         .manage(procs::Terms::default())
         .manage(airflow::AirflowState::default())
+        .manage(jupyter::JupyterState::default())
+        .manage(dbt::DbtState::default())
+        .manage(audit::AuditState::default())
         .invoke_handler(tauri::generate_handler![
             list_connections,
             save_connection,
@@ -370,7 +377,53 @@ pub fn run() {
             airflow::airflow_env_compose,
             airflow::airflow_env_register,
             airflow::airflow_env_health,
-            airflow::airflow_env_forget
+            airflow::airflow_env_forget,
+            jupyter::jupyter_servers,
+            jupyter::jupyter_save_server,
+            jupyter::jupyter_delete_server,
+            jupyter::jupyter_test,
+            jupyter::jupyter_request,
+            jupyter::jupyter_cancel,
+            jupyter::jupyter_ws_open,
+            jupyter::jupyter_ws_send,
+            jupyter::jupyter_ws_close,
+            jupyter::jupyter_release,
+            jupyter::jupyter_env_create,
+            jupyter::jupyter_env_compose,
+            jupyter::jupyter_env_register,
+            jupyter::jupyter_env_health,
+            jupyter::jupyter_env_forget,
+            jupyter::jupyter_open_lab,
+            dbt::dbt_profiles,
+            dbt::dbt_save_profile,
+            dbt::dbt_delete_profile,
+            dbt::dbt_run,
+            dbt::dbt_cancel,
+            dbt::dbt_release,
+            dbt::dbt_version,
+            dbt::dbt_project_profile,
+            dbt::dbt_artifacts,
+            dbt::dbt_compiled,
+            audit::audit_capabilities,
+            audit::audit_projects,
+            audit::audit_load,
+            audit::audit_save_project,
+            audit::audit_save_mappings,
+            audit::audit_delete_project,
+            audit::audit_delete_artifact,
+            audit::audit_schemas,
+            audit::audit_discover,
+            audit::audit_suggest,
+            audit::audit_validate,
+            audit::audit_estimate,
+            audit::audit_capture,
+            audit::audit_reconcile,
+            audit::audit_cancel,
+            audit::audit_release,
+            audit::audit_history,
+            audit::audit_get,
+            audit::audit_findings,
+            audit::audit_export
         ])
         .build(tauri::generate_context!())
         .expect("error while building Rits")
@@ -379,6 +432,8 @@ pub fn run() {
                 let procs = app.state::<procs::Procs>();
                 tauri::async_runtime::block_on(procs.kill_owner(label));
                 procs::pty_close_owner(&app.state::<procs::Terms>(), label);
+                tauri::async_runtime::block_on(app.state::<jupyter::JupyterState>().close_owner(label));
+                tauri::async_runtime::block_on(app.state::<audit::AuditState>().cancel_owner(label));
             }
             if let tauri::RunEvent::Exit = event {
                 // Do not leave language servers, debuggers or programs running.

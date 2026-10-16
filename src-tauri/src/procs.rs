@@ -292,6 +292,11 @@ pub async fn read_rpc_messages<R: AsyncRead + Unpin>(r: R, mut emit: impl FnMut(
 
 impl Procs {
     pub async fn spawn(&self, app: AppHandle, spec: SpawnSpec, owner: &str) -> Result<u32, String> {
+        self.spawn_notify(app, spec, owner, None).await
+    }
+
+    /// Like `spawn`, and sends the exit code on `done` after proc-exit (used to release locks).
+    pub async fn spawn_notify(&self, app: AppHandle, spec: SpawnSpec, owner: &str, done: Option<tokio::sync::oneshot::Sender<Option<i32>>>) -> Result<u32, String> {
         let mut c = prepare(&spec)?;
         let mut child = c.spawn().map_err(|e| format!("Não foi possível iniciar '{}': {e}", spec.program))?;
         let pid = child.id();
@@ -317,7 +322,11 @@ impl Procs {
             let status = child.wait().await.ok();
             let _ = h1.await;
             let _ = h2.await;
-            let _ = app.emit("proc-exit", ExitEvent { id, code: status.and_then(|s| s.code()) });
+            let code = status.and_then(|s| s.code());
+            let _ = app.emit("proc-exit", ExitEvent { id, code });
+            if let Some(d) = done {
+                let _ = d.send(code);
+            }
         });
         Ok(pid.unwrap_or(0))
     }

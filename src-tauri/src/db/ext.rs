@@ -256,6 +256,49 @@ impl ExtConn {
         matches!(self.child.try_wait(), Ok(None))
     }
 
+    /// Generic request (used by the Migration Audit: audit_discover, audit_begin, audit_describe).
+    pub async fn call_json(&mut self, op: &str, args: Value) -> Result<Value, String> {
+        self.call(op, args).await
+    }
+
+    /// Streams the rows of a query in batches (`audit_stream`): one `{"id", "rows"}` line per batch,
+    /// then the final reply with the row count. `f` returning an error stops reading (the caller
+    /// then kills the process to cancel the query).
+    pub async fn stream(&mut self, sql: &str, params: &[String], batch: usize, f: &mut (dyn FnMut(Vec<Option<String>>) -> Result<(), String> + Send)) -> Result<u64, String> {
+        self.next += 1;
+        let req = json!({ "id": self.next, "op": "audit_stream", "sql": sql, "params": params, "batch": batch });
+        let line = format!("{req}\n");
+        if self.stdin.write_all(line.as_bytes()).await.is_err() || self.stdin.flush().await.is_err() {
+            return Err("O driver foi encerrado".into());
+        }
+        let mut resp = String::new();
+        loop {
+            resp.clear();
+            match self.out.read_line(&mut resp).await {
+                Ok(0) | Err(_) => {
+                    let e = self.stderr.lock().await.clone();
+                    return Err(if e.trim().is_empty() { "O driver foi encerrado".into() } else { format!("O driver foi encerrado:\n{}", e.trim()) });
+                }
+                Ok(_) => {}
+            }
+            let Ok(v) = serde_json::from_str::<Value>(resp.trim()) else { continue };
+            if v.get("id").and_then(Value::as_u64) != Some(self.next) {
+                continue;
+            }
+            if let Some(rows) = v.get("rows").and_then(Value::as_array) {
+                for r in rows {
+                    let row: Vec<Option<String>> = r.as_array().map(|a| a.iter().map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                    f(row)?;
+                }
+                continue;
+            }
+            if v.get("ok").and_then(Value::as_bool) == Some(true) {
+                return Ok(v.get("result").and_then(Value::as_u64).unwrap_or(0));
+            }
+            return Err(v.get("error").and_then(Value::as_str).unwrap_or("erro desconhecido").to_string());
+        }
+    }
+
     async fn call<T: DeserializeOwned>(&mut self, op: &str, args: Value) -> Result<T, String> {
         self.next += 1;
         let mut req = json!({ "id": self.next, "op": op });

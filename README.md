@@ -31,6 +31,7 @@ O **Rits** junta esse fluxo numa IDE desktop rápida e leve:
 - **Consulte e explore os dados** em PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse, DuckDB, SQLite, Firebird, MongoDB e compatíveis (CockroachDB, Supabase, Redshift…).
 - **Entenda o modelo** com diagramas ER gerados do banco, com relações, chaves e layout automático.
 - **Suba a infraestrutura** com Docker, Compose, Terraform e Kubernetes direto do editor.
+- **Explore e transforme** em notebooks Jupyter e projetos dbt, e **audite migrações de dados** entre bancos (plugins opcionais).
 
 Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em cartões e uma tela de início para cada projeto) e, no macOS, com o **Liquid Glass** nativo.
 
@@ -84,6 +85,42 @@ Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em c
 
 Limitações: requer Airflow 3 (o Airflow 2 é detectado e recusado); o ambiente local precisa do Docker com cerca de 4 GB de RAM e baixa ~3,2 GB de imagens na primeira vez; o painel web oficial abre numa janela separada ou no navegador.
 
+### Jupyter (plugin)
+
+- Notebooks `.ipynb` (nbformat 4) no **editor da própria IDE**: células Python e Markdown, executar célula, executar daqui em diante e executar tudo, com contadores e ordem das saídas preservados. Células, metadados e saídas desconhecidas são mantidos ao salvar.
+- Saídas: texto, tabelas (pandas), imagens e gráficos (matplotlib), erros com traceback colorido. HTML e JavaScript de notebooks **não confiáveis** não são executados; saídas ativas confiáveis rodam isoladas num iframe sem acesso à IDE.
+- **Kernel**: escolha do servidor e do kernel, estado (ocioso/ocupado), interromper e reiniciar (com aviso de que as variáveis se perdem). Ao reconectar, a IDE consulta o estado real e **nunca reexecuta células**.
+- **Servidores**: Jupyter Server local ou remoto com token (guardado no Keychain / Credential Manager), teste de conexão, arquivos do servidor e kernels em execução. Ou um **JupyterLab local no Docker** com imagem fixada (`quay.io/jupyter/scipy-notebook:2026-10-12`, JupyterLab 4.6.4), pasta do projeto montada em `/home/jovyan/work`, porta só em `127.0.0.1` e token aleatório.
+- Autocomplete vem do **próprio kernel** (o ambiente do servidor, que pode ser diferente do Python da IDE); com o Ruff instalado, erros de sintaxe e nomes indefinidos aparecem nas células.
+- **Abrir no JupyterLab** (janela separada da IDE ou navegador) como complemento.
+
+Validado com Jupyter Server 2.21.1 / JupyterLab 4.6.4. Limitações: widgets interativos (ipywidgets) e LaTeX em Markdown não são renderizados (use o JupyterLab); autenticação por senha do Jupyter não é suportada (use token); desativar o plugin fecha as conexões da IDE, mas não para servidores nem kernels.
+
+### dbt (plugin)
+
+- Detecta projetos pelo `dbt_project.yml` e cria novos com o comando oficial `dbt init`.
+- Executa o **dbt Core** de um ambiente Python do projeto ou da imagem Docker oficial (`ghcr.io/dbt-labs/dbt-postgres:1.9.0`). **Nada é instalado globalmente**; há um botão explícito para instalar o dbt no `.venv` do projeto.
+- `debug`, `deps`, `parse`, `compile`, `run`, `test`, `build`, `docs generate` e visualização da documentação, com seleção (modelo, `+modelo+`, `tag:`, `path:`…), exclusão, target, `--vars`, threads e `--full-refresh` explícito.
+- Antes de comandos que alteram o banco, a IDE mostra o **target e o alcance** (via `dbt ls`) e o impacto do full refresh. Os comandos usam argumentos estruturados (sem shell), um por vez em cada projeto, com log ao vivo, estado por nó, duração, código de saída e cancelamento.
+- **Perfis PostgreSQL gerenciados**: o `profiles.yml` fica na pasta de configuração do Rits, fora do repositório, sem senhas — elas vêm do cofre do sistema ou de uma conexão PostgreSQL do Rits e entram como variável de ambiente só durante a execução. Variáveis de ambiente do projeto (`env_var()`) também podem ser secretas. Outros adapters funcionam com o seu próprio `profiles.yml`.
+- Lê `manifest.json` e `run_results.json` (com checagem de versão do schema e aviso de resultados antigos), mostra falhas que abrem o arquivo, linhagem, SQL compilado, navegação por `ref()`/`source()` com Ctrl/⌘+clique, realce de Jinja e modelos de arquivo (modelo, sources, testes, teste unitário, seed, snapshot).
+
+Validado com dbt Core 1.12.6 e dbt-postgres 1.11.0 (artefatos manifest v12, run_results v6). O dbt v2 é detectado e avisado, mas não foi validado. O grafo de dependências não é um agendador: execuções periódicas ficam com o Airflow ou outro orquestrador.
+
+### Migration Audit (plugin)
+
+Auditoria de **conversões de dados** entre um banco de origem e um de destino, por lógica **determinística** (SQL, metadados, regras explícitas e comparação de evidências — sem IA). O plugin audita: não executa a conversão nem corrige dados, e nunca escreve nos bancos auditados.
+
+- Fluxo: projeto → escopo → descoberta estrutural → mapeamento (sugestões com critérios, que só valem depois de confirmadas) → **baseline imutável** da origem → conversão por fora → **reconciliação** → relatório. Cada reconciliação vira uma execução nova; o histórico é preservado.
+- Comparação por **unidade de reconciliação** (nunca pelo total global), com dimensões separadas: **volume, identidade, campos e relacionamentos**. Resultados: compatível no escopo verificado, divergente, inconclusivo ou não verificado.
+- Identidade por chave preservada, de negócio ou composta, **mapa de IDs** (`id_origem → id_destino`) ou conteúdo. Detecta ausentes, extras, duplicados, multiplicidade, chaves nulas, colisões introduzidas por normalização e problemas do mapa.
+- Campos: separa campo não mapeado, **perda de preenchimento**, valor criado e valor divergente; regras explícitas (trim, maiúsculas, Unicode, vazio = nulo, datas em texto, fuso fixo, precisão, escala, tolerância, JSON, booleanos, mapa de valores). Por padrão nada é normalizado, nulo nunca vira zero e decimais nunca passam por ponto flutuante.
+- Relacionamentos: órfãos e **preservação da associação original** (uma FK válida pode apontar para a entidade errada).
+- Baseline com manifesto JSON e digest, evidências ordenadas em disco (ordenação externa, memória limitada) com SHA-256; detecta arquivos ausentes, truncados ou alterados. Snapshot consistente quando o banco permite.
+- Relatório navegável (unidade → tipo → identidades paginadas, valores sensíveis mascarados) e exportação: relatório HTML autocontido, manifesto JSON, resumo CSV e listas completas em CSV (com proteção contra fórmulas).
+
+Bancos: PostgreSQL, MySQL, MariaDB, SQL Server e Firebird — todos validados com testes de integração reais (PostgreSQL 17, MySQL 8.4, MariaDB 11.8, SQL Server 2022, Firebird 5). Limitações: MongoDB fica fora desta versão; no SQL Server as consultas personalizadas não rodam em transação somente leitura (use um login somente leitura) e o snapshot exige `ALLOW_SNAPSHOT_ISOLATION`; fusos com horário de verão não são suportados nas regras (só deslocamentos fixos); relações 1:N e N:1 exigem conjuntos normalizados por consulta para comparação completa.
+
 ### Infraestrutura
 
 - **Docker**: gerenciador de containers (plugin opcional), com containers agrupados por projeto do Compose, iniciar/parar/reiniciar, logs, shell no container, CPU e memória ao vivo, imagens e volumes.
@@ -120,7 +157,7 @@ Os plugins também encontram ferramentas nas pastas padrão do npm e WinGet, mes
 ## Primeiros passos
 
 1. **Abra uma pasta** ou crie um projeto (Python com `.venv`, Go com `go mod init`, ou vazio).
-2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC), Docker ou Apache Airflow.
+2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC), Docker, Apache Airflow, Jupyter, dbt ou Migration Audit.
 3. **Conecte um banco**: abra a janela Database (Alt+2, ou ⌥2 no Mac), clique em **+**, escolha o banco e preencha a conexão.
 4. **Veja o modelo**: clique direito no schema › **Diagrama ER**.
 5. **Suba a infra**: crie um `compose.yaml` em Novo › docker-compose.yml e clique em **Subir** na barra do editor.
@@ -169,6 +206,7 @@ Os testes de integração (`cargo test -- --ignored`) usam Postgres e MySQL no D
 
 - As conexões ficam em `connections.json` na pasta de configuração do app (`~/Library/Application Support/dev.rits.ide` no macOS, `%APPDATA%\dev.rits.ide` no Windows). **As senhas ainda são guardadas em texto puro**; a integração com o Keychain e o Credential Manager está pendente.
 - Os drivers baixados ficam em `drivers/` na mesma pasta e podem ser apagados quando quiser (são baixados de novo quando necessário).
+- Tokens do Jupyter, senhas dos perfis do dbt e segredos do Airflow ficam no cofre do sistema. Projetos, baselines e evidências do Migration Audit ficam em `migration-audit/` na pasta de configuração (fora dos repositórios) e podem conter dados das tabelas auditadas; exclua-os pelo próprio plugin.
 - O Rits não envia telemetria.
 
 ## Créditos e licença

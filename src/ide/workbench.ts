@@ -24,6 +24,7 @@ import { Structure } from "./structure";
 import { DbTools } from "./dbtools";
 import { DockerTools, dockerEnabled } from "./docker";
 import { airflowEnabled, loadAirflow, type AirflowHandle } from "./airflow/plugin";
+import { LAZY_PLUGINS, pluginEnabled, type PluginHandle } from "./plugins";
 import { searchEverywhere, findInFiles, gotoLine, recentFiles, fileStructurePopup } from "./search";
 import { openSettings } from "./settings";
 import { openCloneDialog, openNewProjectDialog } from "./welcome";
@@ -93,6 +94,9 @@ export class Workbench {
   /** Airflow plugin, loaded on demand (its code lives in a separate chunk). */
   airflow: AirflowHandle | null = null;
   private airflowLoading: Promise<void> | null = null;
+  /** Jupyter, dbt and Migration Audit (see plugins.ts), loaded on demand. */
+  plugins: Record<string, PluginHandle | null> = {};
+  private pluginLoading = new Map<string, Promise<void>>();
 
   private toolWindows = new Map<string, ToolWindow>();
   private visible: Partial<Record<Anchor, string>> = {};
@@ -207,6 +211,8 @@ export class Workbench {
       this.lsp.notifyWatched(paths.filter((p) => /\.(py|go|mod|toml|cfg|json)$/i.test(p)));
     });
 
+    // plugins that open files (notebooks) must be loaded before the files are restored
+    await this.pluginsReady();
     // restore layout and files
     const lay = (this.settings.layout ?? {}) as Partial<Record<Anchor, string>>;
     // A tool window saved on one side may live elsewhere now (Database moved to the left card).
@@ -247,6 +253,34 @@ export class Workbench {
       this.airflow = null;
       a.dispose();
     }
+    for (const p of LAZY_PLUGINS) {
+      const on = pluginEnabled(p.key);
+      if (on && !this.plugins[p.id] && !this.pluginLoading.has(p.id)) {
+        this.pluginLoading.set(
+          p.id,
+          p
+            .load(this)
+            .then((handle) => {
+              this.plugins[p.id] = handle;
+            })
+            .catch((e) => console.error(p.id, e))
+            .finally(() => {
+              this.pluginLoading.delete(p.id);
+              // disabled while loading
+              if (!pluginEnabled(p.key)) this.syncPlugins();
+            }),
+        );
+      } else if (!on && this.plugins[p.id]) {
+        const handle = this.plugins[p.id]!;
+        this.plugins[p.id] = null;
+        handle.dispose().catch((e) => console.error(p.id, e));
+      }
+    }
+  }
+
+  /** Resolves when the enabled plugins finished loading. */
+  async pluginsReady() {
+    await Promise.all([...this.pluginLoading.values(), this.airflowLoading ?? Promise.resolve()]);
   }
 
   saveSettings() {

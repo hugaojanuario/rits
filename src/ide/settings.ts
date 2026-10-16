@@ -8,6 +8,7 @@ import { keymapId, keymapTable, setKeymap, type KeymapId } from "./keymap";
 import { completionSettings, setCompletionSettings, type CompletionSettings } from "./completion";
 import { DOCKER_COMPONENTS, DOCKER_INSTALL, dockerEnabled, setDockerEnabled } from "./docker";
 import { airflowEnabled, setAirflowEnabled } from "./airflow/plugin";
+import { pluginEnabled, setPluginEnabled } from "./plugins";
 import { PLUGINS, clearSdkCache, findGo, findInterpreters, runBackground, setCurrentPython, getCurrentPython, type LangPlugin } from "./sdk";
 import type { Workbench } from "./workbench";
 
@@ -235,6 +236,39 @@ async function pluginsPage(wb: Workbench, el: HTMLElement, focus?: string) {
   for (const p of PLUGINS) cards.push(await pluginCard(wb, p, el, focus === p.id));
   el.append(...cards);
   el.append(h("h3", { style: "margin-top:8px" }, "Infraestrutura"), await dockerCard(wb, el, focus === "docker"), airflowCard(wb, el, focus === "airflow"));
+  el.append(
+    h("h3", { style: "margin-top:8px" }, "Dados"),
+    optionalCard(wb, el, focus, {
+      id: "jupyter",
+      key: "plugin.jupyter",
+      icon: "jupyter",
+      name: "Jupyter",
+      desc: "Notebooks .ipynb no editor da IDE: células Python e Markdown, execução por kernel de um Jupyter Server (local, remoto ou JupyterLab no Docker), tabelas, imagens, gráficos e erros, interrupção e reinício do kernel. Abre o JupyterLab como complemento.",
+      hint: "Não precisa de Jupyter instalado na máquina para usar um servidor remoto ou o ambiente Docker. Tokens ficam no cofre do sistema.",
+      opened: "A janela Jupyter apareceu na faixa da direita. Conecte um servidor ou crie um JupyterLab local.",
+      window: "jupyter",
+    }),
+    optionalCard(wb, el, focus, {
+      id: "dbt",
+      key: "plugin.dbt",
+      icon: "dbt",
+      name: "dbt",
+      desc: "Projetos dbt Core (dbt_project.yml): debug, deps, parse, compile, run, test, build e docs com seleção estruturada, prévia do alcance antes de alterar o banco, logs ao vivo, resultados, linhagem, SQL compilado e navegação por ref()/source(). Perfis PostgreSQL gerenciados sem senhas no repositório.",
+      hint: "Usa o dbt Core de um ambiente Python do projeto ou a imagem Docker oficial; nada é instalado globalmente. Validado com dbt Core 1.10–1.12 e dbt-postgres.",
+      opened: "A janela dbt apareceu na faixa da direita.",
+      window: "dbt",
+    }),
+    optionalCard(wb, el, focus, {
+      id: "audit",
+      key: "plugin.audit",
+      icon: "audit",
+      name: "Migration Audit",
+      desc: "Auditoria de conversões de dados entre bancos: descoberta estrutural, mapeamento confirmado, baseline imutável, reconciliação por unidade (volume, identidade, campos, relacionamentos) e relatórios com evidências e limitações. Lógica determinística, sem IA.",
+      hint: "PostgreSQL, MySQL/MariaDB, SQL Server e Firebird (somente leitura). O plugin audita: não executa a conversão nem altera dados.",
+      opened: "A janela Migration Audit apareceu na faixa da direita.",
+      window: "audit",
+    }),
+  );
   const builtin: [string, string, string][] = [
     ["Database Tools", "database", "PostgreSQL e MySQL/MariaDB: explorador, console SQL, editor de dados, backup e restauração."],
     ["Git", "branch", "Branches, commit, push/pull, log, diff e marcadores de alteração no editor."],
@@ -246,6 +280,35 @@ async function pluginsPage(wb: Workbench, el: HTMLElement, focus?: string) {
     ...builtin.map(([name, ic, desc]) =>
       h("div.plugin-card", null, h("div.pc-icon", null, icon(ic)), h("div.pc-body", null, h("div.pc-title", null, name, h("span.tag.ok", null, "incluído")), h("div.dim", null, desc))),
     ),
+  );
+}
+
+interface OptionalPlugin {
+  id: string;
+  key: string;
+  icon: string;
+  name: string;
+  desc: string;
+  hint: string;
+  opened: string;
+  window: string;
+}
+
+/** Card of an optional plugin loaded on demand (Jupyter, dbt, Migration Audit). */
+function optionalCard(wb: Workbench, el: HTMLElement, focus: string | undefined, p: OptionalPlugin): HTMLElement {
+  const on = pluginEnabled(p.key);
+  const toggle = h("button.btn", { class: on ? "" : "primary" }, icon(on ? "general/delete" : "actions/install"), on ? "Desinstalar" : "Instalar plugin") as HTMLButtonElement;
+  toggle.onclick = () => {
+    setPluginEnabled(p.key, !on);
+    if (!on) notify(`Plugin ${p.name} instalado`, p.opened, "ok", [{ label: "Abrir", run: () => setTimeout(() => wb.show(p.window, true), 400) }], 8000);
+    else toast(`Plugin ${p.name} desativado: conexões e tarefas internas foram encerradas; arquivos e dados foram preservados.`, "info", 6000);
+    pluginsPage(wb, clear(el), p.id);
+  };
+  return h(
+    "div.plugin-card",
+    { style: focus === p.id ? "border-color:var(--accent)" : "" },
+    h("div.pc-icon", null, icon(p.icon)),
+    h("div.pc-body", null, h("div.pc-title", null, p.name, on ? h("span.tag.ok", null, "ativo") : "", h("span.grow"), toggle), h("div.dim", null, p.desc), h("div.hint", null, p.hint)),
   );
 }
 

@@ -10,14 +10,14 @@ pub struct MyConn {
     id: u32,
 }
 
-fn fmt_err(e: &mysql_async::Error) -> String {
+pub(crate) fn fmt_err(e: &mysql_async::Error) -> String {
     match e {
         mysql_async::Error::Server(s) => format!("ERRO {} ({}): {}", s.code, s.state, s.message),
         other => err_chain(other),
     }
 }
 
-fn opts(cfg: &ConnConfig, db: &str) -> OptsBuilder {
+pub(crate) fn opts(cfg: &ConnConfig, db: &str) -> OptsBuilder {
     let mut o = OptsBuilder::default()
         .ip_or_hostname(cfg.host.clone())
         .tcp_port(cfg.port)

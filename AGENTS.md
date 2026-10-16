@@ -12,7 +12,7 @@ Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, *
 - **Código**: editor CodeMirror 6 com servidores de linguagem (LSP), execução, testes, depuração (DAP), terminal real (PTY), Git e navegação no estilo IntelliJ.
 - **Banco de dados**: explorador de conexões, console SQL, editor de dados, DDL, diagrama ER, exportação e backup/restore com as ferramentas nativas (`pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`), no estilo do DBeaver. PostgreSQL e MySQL/MariaDB têm driver embutido; SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse e MongoDB baixam o driver na primeira conexão (seção 5.7).
 - **Leve**: Tauri 2 com o WebView do sistema (WebView2 no Windows, WKWebView no macOS), sem Chromium embutido. O instalador NSIS tem cerca de 3,5 MB, o exe cerca de 7 MB, o `Rits.app` cerca de 7,6 MB, e o processo principal usa cerca de 30 MB de RAM.
-- **Plugins opcionais**: Docker e Apache Airflow são ativados em Configurações › Plugins. Desativados, não carregam código nem fazem requisições.
+- **Plugins opcionais**: Docker, Apache Airflow, Jupyter, dbt e Migration Audit são ativados em Configurações › Plugins. Desativados, não carregam código nem fazem requisições (Airflow, Jupyter, dbt e Migration Audit ficam em chunks carregados por `import()`).
 
 A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos visíveis ao usuário em pt-BR, e comentários de código e identificadores em inglês, como no resto do código.
 
@@ -28,9 +28,10 @@ A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos 
 | Camada | Tecnologia |
 |---|---|
 | Runtime | Tauri 2 (janela **sem moldura**: `decorations: false`; a barra de título é desenhada pelo app) |
-| Backend | Rust 2021: `tokio`, `tokio-postgres` (+ `postgres-native-tls`), `mysql_async`, `portable-pty` (ConPTY), `notify`, `ignore`, `regex`, `trash`, `encoding_rs`, `reqwest` (`native-tls`, cliente do Airflow), `keyring` (cofre do sistema), `getrandom`/`base64` (segredos do ambiente local) |
+| Backend | Rust 2021: `tokio`, `tokio-postgres` (+ `postgres-native-tls`), `mysql_async`, `portable-pty` (ConPTY), `notify`, `ignore`, `regex`, `trash`, `encoding_rs`, `reqwest` (`native-tls`, clientes do Airflow e do Jupyter), `keyring` (cofre do sistema), `getrandom`/`base64` (segredos), `tokio-tungstenite` (WebSocket dos kernels Jupyter), `sha2` e `unicode-normalization` (Migration Audit) |
 | Frontend | TypeScript **sem framework** (nada de React/Vue), Vite, DOM puro com o helper `h()` |
 | Editor | CodeMirror 6 (`@codemirror/*`), `@codemirror/lsp-client`, `@codemirror/merge` (diff), `@codemirror/legacy-modes` |
+| Notebooks | `marked` (Markdown) + `DOMPurify` (sanitização), só no chunk do plugin Jupyter |
 | Terminal | `@xterm/xterm` + `@xterm/addon-fit` |
 | Linguagens (instaladas pelo usuário via Plugins) | Python: basedpyright, Ruff, debugpy, pytest · Go: gopls, Delve (`dlv`), staticcheck |
 
@@ -97,6 +98,10 @@ cd src-tauri && cargo test -- --ignored --test-threads=1
 | `tests/airflow_live.rs` | fluxo completo num Airflow 3 real (`--ignored`; veja 5.9) |
 | `tests/ext_driver.rs` | drivers sob demanda: cria o venv dos drivers numa pasta temporária e conversa com o `rits_driver.py` via `ExtConn` (SQLite, sem download) |
 | `tests/windows_compat.rs` | pastas das ferramentas dos plugins e execução de launchers `.cmd` com caminhos e argumentos acentuados; round-trip no Credential Manager com `--ignored` |
+| `tests/audit_engine.rs` | Migration Audit sem banco: os cenários da especificação (ausentes com chave, mesma contagem com identidades diferentes, perda compensada por duplicação, mapa de IDs, chaves compostas/duplicadas/colisões, fusos, decimais, zeros à esquerda, baseline corrompida, exportação com HTML e fórmulas…) — roda no `cargo test` normal |
+| `tests/audit_db.rs` | Migration Audit ponta a ponta em PostgreSQL, MySQL, MariaDB, SQL Server e Firebird (`--ignored`; containers e portas no cabeçalho do arquivo): baseline, reconciliação, relacionamentos, erro de permissão, cancelamento, origem alterada, estimativas, mapa de IDs |
+| `tests/jupyter_client.rs` | protocolo de mensagens, autenticação por token contra servidor falso, caminhos, compose do ambiente local; `jupyter_live` (`--ignored`) roda contra um JupyterLab real (instruções no cabeçalho) |
+| `tests/dbt_plugin.rs` | argumentos estruturados, seleção, Docker sem segredos na linha de comando, perfis sem senha, versão, artefatos; `dbt_live` (`--ignored`) roda dbt Core real contra PostgreSQL (`RITS_DBT`, `RITS_DBT_PG_PORT`) |
 | `tests/ide_backend.rs` | framing JSON-RPC com escritas picotadas, UTF-8 dividido entre leituras, operações de arquivo (CRLF, BOM, binário, .gitignore, busca), e handshake real com gopls, basedpyright, debugpy e Delve via TCP |
 
 > No MySQL de teste, sempre use `--default-character-set=utf8mb4` ao popular dados pelo `docker exec`. Sem isso o texto acentuado fica com dupla codificação e parece um bug do app, mas não é.
@@ -171,6 +176,10 @@ src/
     infra.ts               Dockerfile, Compose, Terraform e Kubernetes: detecção, ações (CLIs no Terminal) e modelos
     airflow/               plugin opcional Apache Airflow (seção 5.9): plugin.ts (entrada leve), api.ts, panel.ts,
                            dagTab.ts, instanceDialog.ts, env.ts (ambiente Docker), project.ts, web.ts
+    plugins.ts             plugins carregados sob demanda (LAZY_PLUGINS) e pontos de extensão do editor (contribute)
+    jupyter/               plugin Jupyter (5.10): api.ts, panel.ts (servidores, ambiente Docker), notebook.ts, render.ts
+    dbt/                   plugin dbt (5.11): api.ts, panel.ts, run.ts (aba de execução), editor.ts (Jinja, ref/source, modelos)
+    audit/                 plugin Migration Audit (5.12): api.ts, panel.ts, projectTab.ts (assistente, mapeamento, relatórios)
   assets/icons/            SVGs do expui (Apache 2.0) com variantes _dark e @20x20
 src-tauri/
   tauri.conf.json          productName "Rits", identifier "dev.rits.ide", janela sem moldura
@@ -180,7 +189,11 @@ src-tauri/
   src/lib.rs               comandos de banco + registro de TODOS os comandos + setup (migração) + limpeza ao fechar
   src/store.rs             conexões e documentos JSON na pasta de configuração; migração do nome antigo
   src/db/{mod,pg,my}.rs    sessões de banco (Postgres/MySQL), metadados, DDL, diagrama, execução, cancelamento
-  src/airflow/             plugin Airflow: client.rs (HTTP /api/v2, JWT, erros, paginação), secrets.rs (cofre do sistema), mod.rs (comandos)
+  src/airflow/             plugin Airflow: client.rs (HTTP /api/v2, JWT, erros, paginação), secrets.rs (chaves do Airflow), mod.rs (comandos)
+  src/secrets.rs           cofre do sistema compartilhado pelos plugins (keyring), segredos aleatórios, uuid4
+  src/jupyter/             plugin Jupyter: client.rs (REST /api, token), proto.rs (mensagens 5.3), mod.rs (comandos, WebSocket, ambiente Docker)
+  src/dbt/                 plugin dbt: mod.rs (argumentos, perfis, execução com lock), artifacts.rs (manifest/run_results)
+  src/audit/               Migration Audit: canon, engine, evidence, adapter, analysis, runner, store, report, model, mod (comandos)
   src/db/ext.rs            drivers sob demanda: venv privado, pip install no primeiro uso, ExtConn (JSON por linha via stdio)
   src/db/drivers/rits_driver.py  o "driver host" Python (SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB)
   src/tools.rs             backup/restore: monta argumentos, localiza binários, transmite o log
@@ -225,7 +238,7 @@ O `host.ts` registra **um** listener Tauri por evento e distribui por `id` com `
 
 **Tool windows**: `wb.register({id, title, icon, anchor: "left"|"right"|"bottom", shortcut, body, headerTabs?, actions?, onShow?})`. Há uma visível por lado (`show`, `hide`, `toggle`, `isVisible`). O cabeçalho do cartão (seletor segmentado + `actions` + menu ⋮, e `headerTabs` numa segunda linha nos cartões laterais) é refeito por `refreshHeader(id)`, e `setBadge(id, bool)` acende o ponto vermelho no segmento e, com o painel oculto, no botão de layout da barra de título. O nome do ícone é o arquivo em `assets/icons/toolwindows/<nome>@20x20.svg` (ou um ícone próprio do `icons.ts`).
 
-IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, esquerda), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12), `docker` (só com o plugin, embaixo à direita) e `airflow` (só com o plugin, à direita).
+IDs e atalhos atuais: `project` (Alt+1), `database` (Alt+2, esquerda), `find` (Alt+3), `run` (Alt+4), `debug` (Alt+5), `problems` (Alt+6), `structure` (Alt+7), `services` (Alt+8), `git` (Alt+9), `commit` (Alt+0), `terminal` (Alt+F12), `docker` (só com o plugin, embaixo à direita), `airflow`, `jupyter`, `dbt` e `audit` (só com os respectivos plugins, à direita).
 
 **Posição das tool windows**: cada janela fica num dos três cartões (`anchor`: `left`, `right` ou `bottom`); a ordem no seletor vem de `order`. O menu ⋮ tem "Mover para o painel esquerdo/inferior/direito", "Restaurar layout padrão" e "Ocultar". A posição é salva no `localStorage` `toolLayout` (global, vale para todos os projetos) e aplicada no `register()`. Padrão: Projeto, Database, Commit e Estrutura à esquerda; Airflow à direita; o resto embaixo. Os botões de layout da barra de título (`layoutBtns`) chamam `toggleSide()`; com o cartão esquerdo oculto, um botão do projeto aparece na barra de título (`.left-hidden`).
 
@@ -281,6 +294,7 @@ O backup e o restore montam argumentos em `tools.rs` (`pg_plan`/`my_plan`, que s
 Na pasta de configuração (`%APPDATA%\dev.rits.ide\` no Windows, `~/Library/Application Support/dev.rits.ide/` no macOS) ficam:
 - `connections.json`: conexões de banco (**senhas em texto puro**; melhoria pendente: migrá-las para o cofre do sistema de `airflow/secrets.rs`, já usado pelo Airflow);
 - `airflow-instances.json` e `airflow-envs.json`: instâncias e ambientes locais do Airflow (**sem** senhas nem tokens, que ficam no cofre do sistema); `airflow-envs/<slug>/compose.yaml`: o compose de cada ambiente local (fora do projeto e do Git);
+- `jupyter-servers.json`, `jupyter-envs.json`, `jupyter-envs/<slug>/compose.yaml` e `jupyter-trust.json` (Jupyter, sem tokens); `dbt-profiles.json` e `dbt-profiles/<id>/profiles.yml` (dbt, sem senhas); `migration-audit/` (projetos, baselines, execuções e exportações do Migration Audit — podem conter dados auditados);
 - `history.json`: histórico SQL; `recentProjects.json`: projetos recentes; `project-<…>.json`: `ProjectSettings` de cada projeto (layout, arquivos abertos, breakpoints, configurações de execução, interpretador, pastas expandidas, consoles).
 
 Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no `localStorage`; sempre envolva o acesso em `try/catch`. Quando o app se chamava "Beaver Grip", o identificador era `dev.beavergrip.app`; `store::migrate_legacy` copia esses arquivos uma única vez.
@@ -298,6 +312,37 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 - **Projeto** (`project.ts`, `ProjectSettings.airflow`): instância, pasta de DAGs e forma de entrega (`volume`, `git` ou `manual`). A API não recebe arquivos. Ao salvar um `.py` da pasta de DAGs, a IDE acompanha o processamento (`last_parsed_time` e `importErrors`) e avisa quando a DAG foi processada ou deu erro; no modo Git, lembra de publicar com commit e push. O arquivo local de uma DAG vem do `relative_fileloc`. Para o autocomplete, `installSdk()` instala `apache-airflow-task-sdk==TASK_SDK_VERSION` (`env.ts`, a versão que o `apache-airflow` 3.3.2 exige) no interpretador do projeto, só quando o usuário aceita (sugerido uma vez por sessão, ao criar uma DAG ou associar o projeto), e reinicia o LSP de Python. Ao subir a versão do Airflow, atualize `AIRFLOW_VERSION` e `TASK_SDK_VERSION` juntos.
 - **Painel web** (`web.ts`): a UI oficial abre numa janela separada (`airflow-web-*`, fora das capabilities da IDE, sem acesso a comandos) ou no navegador do sistema. Login e navegação foram validados; as funções principais usam a API nativa.
 - **Teste real**: suba um Airflow 3 (por exemplo, o ambiente local da IDE), coloque `rits_smoke.py` e `rits_quebrada.py` (veja o cabeçalho de `tests/airflow_live.rs`) na pasta de DAGs e rode `RITS_AIRFLOW_URL=http://127.0.0.1:8080 RITS_AIRFLOW_PASSWORD=... cargo test --test airflow_live -- --ignored`.
+
+### 5.10 Plugin Jupyter
+Plugin opcional (`plugin.jupyter`), carregado por `LAZY_PLUGINS` (`plugins.ts`). O `JupyterTools` registra a tool window `jupyter` e uma contribuição de editor que abre `.ipynb` no `NotebookTab` (o "Abrir como texto" usa `openFile(path, {text: true})`).
+
+- **Backend** (`src/jupyter`): REST só em `/api/...` (`check_path`), token no header `Authorization: token` (vindo do cofre, chave `jupyter:<id>`; URL com `?token=` é recusada). Os kernels usam WebSocket (`/api/kernels/<id>/channels`, serialização JSON legada) aberto pelo backend: sem Origin de navegador, o Jupyter aceita a IDE. **Toda mensagem é montada e lida em `proto.rs`** (lista fechada de pedidos permitidos; eventos `jupyter-msg`/`jupyter-closed` por canal). Conexões pertencem à janela (`close_owner` no `window_reset` e ao destruir a janela).
+- **Execução** (`notebook.ts`): uma célula termina quando chegam o `execute_reply` (shell) **e** o `status: idle` (iopub), em qualquer ordem (`finishPart`). Respostas podem chegar antes de o `invoke` devolver o `msg_id`: ficam em `early` e são reprocessadas. Interromper e reiniciar usam a API REST. Reconectar consulta `/api/kernels/<id>` e nunca reexecuta células.
+- **Sessões**: `POST /api/sessions` com o caminho do notebook como o servidor o vê (`localRoot` ↔ `remoteRoot`; no ambiente Docker, `work`). Sessões criadas pela aba são encerradas ao fechá-la; sessões já existentes (JupyterLab) são preservadas. Desativar o plugin fecha só as conexões.
+- **Confiança**: `render.ts`. Markdown e HTML sempre sanitizados (DOMPurify); HTML com scripts e JavaScript só para notebooks confiáveis ou saídas desta sessão, num iframe `sandbox="allow-scripts"` sem same-origin. A confiança é o SHA-256 do arquivo no documento `jupyter-trust`, atualizada ao salvar.
+- **Ambiente local**: `jupyter_env_create` gera o `compose.yaml` (`compose_for`, imagem fixada em `JUPYTER_IMAGE`, porta `127.0.0.1`, volume `home`, rótulos `dev.rits.plugin=jupyter`) em `jupyter-envs/<slug>/`; `jupyter_env_compose` injeta `RITS_JP_TOKEN` do cofre e aceita só `up/down/stop/start/restart/ps/logs/pull` (`down -v` exige `--rits-confirmed-delete`). O JupyterLab oficial abre por `jupyter_open_lab` (o backend monta a URL com o token e cria a janela `jupyter-web-*`, fora das capabilities).
+- Autocomplete via `complete_request` do kernel; diagnóstico com Ruff (`E9,F63,F7,F82`) nas células concatenadas, quando instalado.
+
+### 5.11 Plugin dbt
+Plugin opcional (`plugin.dbt`). Configuração do projeto em `ProjectSettings.dbt` (pasta, runtime, perfil, target).
+
+- **Comandos** (`dbt_run`): `build_args`/`docker_args` (funções puras, testadas) montam argumentos sem shell; lista fechada em `COMMANDS`; seleção validada por `selector_ok` (nunca começa com `-`). JSON logs (`--log-format json`) alimentam a aba `DbtRunTab`. **Uma execução por pasta `target/`** (lock no `DbtState`, liberado pelo `spawn_notify`). Cancelar mata a árvore e, no Docker, faz `docker kill` do container nomeado.
+- **Perfis gerenciados** (PostgreSQL): documento `dbt-profiles` sem senhas; `render_profile` grava `profiles.yml` em `dbt-profiles/<id>/` com `password: "{{ env_var('RITS_DBT_PASSWORD') }}"`. A senha vem do cofre (`dbt:<perfil>:<target>:password`) ou da conexão do Rits (`connConfig.password`) e entra no ambiente só do target selecionado. No Docker, segredos vão como `-e NOME` (valor herdado do ambiente do processo).
+- Antes de `run/build/seed/snapshot` a UI roda `dbt ls` com a mesma seleção e mostra target, alcance e o impacto do `--full-refresh`.
+- **Artefatos**: `artifacts.rs` aceita manifest v10–v12 e run_results v4–v6 (fora disso: `old`/`newer`/`unknown`), sinaliza resultados de outra invocação e arquivos alterados depois da execução. `ref()`/`source()` resolvem pelo manifest (`resolveRef`) com fallback por nome de arquivo.
+- Os modelos de arquivo (`TEMPLATES`) foram validados com `dbt parse` 1.12.6 (sintaxe `data_tests`, `arguments:`, snapshots em YAML, unit tests).
+
+### 5.12 Plugin Migration Audit
+Plugin opcional (`plugin.audit`) de auditoria determinística de conversões. **Nunca escreve nos bancos auditados** e usa conexões próprias (não as sessões do explorador).
+
+- **Armazenamento** (`store.rs`): `<config>/migration-audit/<projeto>/{project.json, mappings.json, structure-*.json, baselines/<id>/, runs/<id>/}`. Gravação atômica (tmp + rename + fsync). Manifestos com `format`, versão do plugin e `digest` (SHA-256 do JSON sem o campo); cada arquivo de evidência com tamanho e SHA-256 (`verify_baseline`). Mapeamentos têm `version` incrementada a cada salvamento; baselines e execuções guardam a cópia exata das unidades.
+- **Valores canônicos** (`canon.rs`): tipo lógico por dialeto, codificação `tag|u32 len|bytes` (sem colisão por concatenação, nulo com marcador próprio), decimais exatos em texto, datas/horas normalizadas (offset → UTC), valores inválidos viram `Invalid` (nunca nulo). Regras (`Rules`) são explícitas; o padrão não muda nada.
+- **Evidência** (`evidence.rs`): uma linha por identidade, ordenada pela chave canônica (hex), com multiplicidade, digest da chave bruta (colisões por normalização = `*`), digest da linha, FKs e estados dos campos (`N`, `E`, `W:`, `V:`, `I:`, valor opcional). Ordenação externa: blocos de `batch_rows` em memória, depois merge k-way. Limite de disco interrompe a unidade (fica incompleta, nunca vira amostra).
+- **Motor** (`engine.rs`): `Capturer` (linhas → evidência, perfil e exclusões), `MapCapturer`/`translate` (mapa de IDs), `compare` (merge-join: ausentes, extras, multiplicidade, pré-existentes, campos, FKs) e `orphans`/`check_fk_via_map`. Chaves duplicadas nunca escolhem uma linha: campos ficam "não comparados".
+- **Adapters** (`adapter.rs`): PostgreSQL e MySQL/MariaDB nativos; SQL Server e Firebird pelo `rits_driver.py` (ops `audit_discover`, `audit_describe`, `audit_begin`, `audit_end`, `audit_stream` em lotes). SQL com identificadores escapados por dialeto e valores sempre como parâmetros (`select_sql`, `count_sql`); consultas personalizadas passam por `single_statement` e rodam em transação somente leitura quando o banco suporta. `capabilities()` é a matriz mostrada na UI — atualize-a junto com os testes.
+- **Orquestração** (`runner.rs`): `capture_side` (snapshot do coordenador; no PostgreSQL os workers importam o `pg_export_snapshot`), `reconcile` (usa a configuração congelada da baseline para a origem; campos cujas regras mudaram ficam bloqueados), `volume_result` (estimativas e cardinalidades não 1:1 nunca aprovam). Progresso pelo evento `audit-progress`; cancelamento por `JobCtl` (cancela também a consulta no banco).
+- **Relatórios** (`report.rs`): HTML autocontido (escape completo, sem scripts nem recursos remotos), CSV com proteção contra fórmulas, máscara de valores sensíveis por padrão (detalhado só por ação explícita).
+- Para um banco novo: variante em `dialect_of`, descoberta e streaming no adapter (ou no driver Python), linha na matriz `capabilities()` e um caso em `tests/audit_db.rs`.
 
 ---
 
@@ -332,7 +377,7 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 
 **Adicionar uma tool window**: crie uma classe que recebe `wb`, chame `wb.register({...})` no construtor, instancie em `Workbench.mount()`, ponha o atalho em `installKeys()` e acrescente o item em "Exibir › Janelas de ferramentas", que é gerado sozinho.
 
-**Adicionar um plugin opcional**: siga o Airflow. Um módulo de entrada leve (`enabled()`/`setEnabled()` no `localStorage`, que emitem `rits-plugins`), um card em Configurações › Plugins, o carregamento e o `dispose()` em `Workbench.syncPlugins()` e `unregister()` da tool window. O resto vai por `import()` dinâmico, para não pesar a IDE de quem não usa. O `dispose()` precisa parar timers, processos e requisições.
+**Adicionar um plugin opcional**: inclua uma entrada em `LAZY_PLUGINS` (`plugins.ts`) com um módulo que implemente `PluginHandle` (`dispose()` obrigatório, `newItems()` opcional) e, se precisar do editor, use `contribute()` (abrir arquivos, extensões CodeMirror, ir para definição, barra de ações). Para o card, use `optionalCard()` em `settings.ts`. O Airflow segue o padrão antigo: Um módulo de entrada leve (`enabled()`/`setEnabled()` no `localStorage`, que emitem `rits-plugins`), um card em Configurações › Plugins, o carregamento e o `dispose()` em `Workbench.syncPlugins()` e `unregister()` da tool window. O resto vai por `import()` dinâmico, para não pesar a IDE de quem não usa. O `dispose()` precisa parar timers, processos e requisições.
 
 **Adicionar uma ação**: inclua em `actions()` de `search.ts` (para aparecer em Ctrl+Shift+A e no Shift duplo) e, se couber, no `mainMenu()` de `workbench.ts`.
 
@@ -354,6 +399,9 @@ Plugin opcional (Configurações › Plugins › Infraestrutura), ativado pelo `
 - **O debugpy formata o JSON com espaços** (`"success": true`): faça parse do JSON, não compare strings.
 - **Janela sem moldura**: arrastar usa `data-tauri-drag-region` e `startDragging()`; os botões minimizar, maximizar e fechar estão em `renderToolbar()`. Fechar passa por `prepareClose()` para não deixar processos órfãos.
 - **Bundle grande (~1,5 MB de JS)**: é aceitável num app local; o aviso do Vite pode ser ignorado.
+- **Mensagens do kernel Jupyter chegam fora de ordem**: `execute_reply` (shell) e `status: idle` (iopub) vêm em canais diferentes, e podem chegar antes de o `invoke` devolver o `msg_id`. Não "simplifique" `finishPart`/`early` em `notebook.ts`.
+- **`tauri dev` recarrega a página a cada edição**: roteiros temporários de teste carregados pelo `main.ts` rodam de novo a cada recarga. Encerre o app antes de editar.
+- **Migration Audit nunca compara o total global** nem transforma erro em zero: mantenha `volume_result` e os estados `not_verified`/`inconclusive` ao mexer no runner.
 
 ---
 

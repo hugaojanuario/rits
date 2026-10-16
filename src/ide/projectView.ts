@@ -335,6 +335,7 @@ export class ProjectView {
           { separator: true },
           ...INFRA_TEMPLATES.map((t) => ({ label: t.label, icon: t.icon, action: () => this.createInfra(t, dir) })),
           ...(this.wb.airflow ? [{ label: "DAG do Airflow", icon: "airflow", action: () => this.wb.airflow!.newDag(dir) }] : []),
+          ...Object.values(this.wb.plugins).flatMap((p) => p?.newItems?.(dir) ?? []),
         ],
       },
       { separator: true },

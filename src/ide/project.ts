@@ -22,6 +22,10 @@ export interface ProjectSettings {
   dbConsoles?: import("../console").ConsoleState[];
   /** Airflow plugin: instance the project deploys to and how DAG files reach it. */
   airflow?: AirflowProjectLink;
+  /** dbt plugin: project folder, runtime, profile and target. */
+  dbt?: import("./dbt/api").DbtProjectSettings;
+  /** Migration Audit plugin: last opened audit project. */
+  audit?: { lastProject?: string };
 }
 
 export interface AirflowProjectLink {
