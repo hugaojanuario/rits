@@ -1,9 +1,12 @@
-O Rits reúne código Python e Go, bancos de dados e infraestrutura em uma IDE leve. A versão 0.4.2 corrige:
+O Rits reúne código Python e Go, bancos de dados, orquestração e infraestrutura em uma IDE leve. Novidades da 0.5.0:
 
-- O X das abas abertas volta a fechar a aba.
-- Excluir arquivos e pastas em locais sem Lixeira (como pastas do OneDrive ou compartilhamentos de rede): a IDE mostra o motivo e oferece excluir definitivamente, só com sua confirmação.
-
-Da 0.4.1: botão ⋮ na faixa de janelas, nomes sem autocorreção, renomear por diálogo, ⌘⌫ e F2 na árvore e submenu "Novo" legível no Liquid Glass.
+- **Assistente IA (plugin)**: um chat dentro da IDE com o seu Claude Code ou o seu Codex, usando o CLI oficial e a sua conta. O agente enxerga o projeto, o arquivo aberto e a seleção, os problemas, o Git, os bancos conectados (consultas somente leitura), as DAGs e os logs do Airflow, o dbt, os notebooks, o Docker e o Migration Audit. Edições e comandos do Claude Code pedem aprovação no chat, com o diff.
+- **Exportar resultados** do console e das tabelas em CSV, TSV, Excel (.xlsx), JSON, JSON Lines, XML, `INSERT` SQL, Markdown e HTML, da página visível ou do resultado completo, com progresso e cancelamento.
+- **Atualização pelo próprio app**: quando há versão nova, aparece um botão na barra de título; o instalador é conferido pelo SHA-256 e o Rits reabre na versão nova.
+- **Janelas de ferramentas arrastáveis**: arraste o ícone de qualquer janela, inclusive as dos plugins, para o painel esquerdo, direito ou inferior.
+- **Guias dos plugins**: o botão **?** de cada janela de plugin abre a documentação dentro da IDE (Migration Audit, Assistente IA, Airflow, dbt, Jupyter e Docker).
+- O X das abas fecha de primeira, e uma falha ao salvar não trava mais a aba.
+- Um pequeno espaço no topo do editor de código e do console SQL.
 
 Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64** ou `Rits-macos-arm64.dmg` para **Mac Apple Silicon**. O arquivo `SHA256SUMS.txt` contém os hashes dos dois instaladores.
 
