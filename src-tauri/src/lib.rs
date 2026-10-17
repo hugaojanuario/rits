@@ -368,6 +368,7 @@ pub fn run() {
             ide::pty_resize,
             ide::pty_close,
             ide::window_reset,
+            ide::macos_quarantine_status,
             airflow::airflow_instances,
             airflow::airflow_save_instance,
             airflow::airflow_delete_instance,

@@ -141,7 +141,19 @@ Databases: PostgreSQL, MySQL, MariaDB, SQL Server and Firebird — all validated
 
 ### macOS (Apple Silicon)
 
-[Download the DMG for Apple Silicon](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg), open it and drag Rits to Applications. The app is ad-hoc signed, without notarization: the first time, right-click › **Open** and, if needed, allow it in System Settings › Privacy & Security.
+The simplest way is one line in the Terminal: it downloads the latest version, installs it in Applications and clears the quarantine.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hugaojanuario/rits/main/scripts/install-macos.sh | bash
+```
+
+Or [download the DMG for Apple Silicon](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg), drag Rits to Applications and run in the Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Rits.app
+```
+
+Rits is ad-hoc signed and not notarized by Apple; without that command macOS keeps the app quarantined (warnings on launch and execution from a temporary copy, which prevents updates). If you forget, the IDE itself tells you and offers to copy the command. Updates installed by Rits clear the quarantine automatically.
 
 Language and database tools come from Homebrew:
 

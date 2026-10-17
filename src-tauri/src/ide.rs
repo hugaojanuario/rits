@@ -234,3 +234,27 @@ pub async fn window_reset(window: tauri::Window, p: State<'_, Procs>, t: State<'
     procs::pty_close_owner(&t, window.label());
     Ok(())
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuarantineStatus {
+    pub bundle: String,
+    /// macOS runs the app from a random read-only copy (App Translocation) while it is quarantined.
+    pub translocated: bool,
+    pub quarantined: bool,
+}
+
+/// macOS: whether the app bundle still carries the quarantine attribute (ad-hoc signed app
+/// downloaded by a browser). Always "not quarantined" on other systems.
+#[tauri::command]
+pub async fn macos_quarantine_status() -> QuarantineStatus {
+    let exe = std::env::current_exe().unwrap_or_default();
+    // .../Rits.app/Contents/MacOS/rits
+    let bundle = exe.ancestors().nth(3).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    if !cfg!(target_os = "macos") || !bundle.ends_with(".app") {
+        return QuarantineStatus { bundle, translocated: false, quarantined: false };
+    }
+    let translocated = bundle.contains("/AppTranslocation/");
+    let quarantined = procs::capture("xattr", &["-p".into(), "com.apple.quarantine".into(), bundle.clone()], "", None, 10).await.map(|c| c.code == Some(0)).unwrap_or(false);
+    QuarantineStatus { bundle, translocated, quarantined }
+}

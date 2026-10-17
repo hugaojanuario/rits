@@ -7,4 +7,10 @@ Da 0.4.1: botão ⋮ na faixa de janelas, nomes sem autocorreção, renomear por
 
 Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64** ou `Rits-macos-arm64.dmg` para **Mac Apple Silicon**. O arquivo `SHA256SUMS.txt` contém os hashes dos dois instaladores.
 
-No Mac, arraste o Rits para Aplicativos. A assinatura é ad-hoc, sem notarização; na primeira abertura, use clique direito → **Abrir** e, se necessário, autorize em Ajustes do Sistema → Privacidade e Segurança.
+No Mac, instale com uma linha no Terminal (baixa, instala em Aplicativos e libera o app):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hugaojanuario/rits/main/scripts/install-macos.sh | bash
+```
+
+Ou arraste o Rits do DMG para Aplicativos e rode `xattr -dr com.apple.quarantine /Applications/Rits.app`: a assinatura é ad-hoc, sem notarização da Apple, e sem esse comando o macOS mantém o app em quarentena.

@@ -140,7 +140,19 @@ Bancos: PostgreSQL, MySQL, MariaDB, SQL Server e Firebird — todos validados co
 
 ### macOS (Apple Silicon)
 
-[Baixe o DMG para Apple Silicon](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg), abra e arraste o Rits para Aplicativos. O app usa assinatura ad-hoc, sem notarização: na primeira vez, use clique direito › **Abrir** e, se necessário, autorize em Ajustes do Sistema › Privacidade e Segurança.
+A forma mais simples é uma linha no Terminal: baixa a última versão, instala em Aplicativos e libera o app.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hugaojanuario/rits/main/scripts/install-macos.sh | bash
+```
+
+Ou [baixe o DMG para Apple Silicon](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg), arraste o Rits para Aplicativos e rode no Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Rits.app
+```
+
+O Rits tem assinatura ad-hoc e não é notarizado pela Apple; sem esse comando, o macOS mantém o app em quarentena (avisos ao abrir e execução a partir de uma cópia temporária, o que impede as atualizações). Se esquecer, a própria IDE avisa e oferece copiar o comando. As atualizações feitas pelo Rits já liberam o app sozinhas.
 
 As ferramentas de linguagem e de banco vêm do Homebrew:
 

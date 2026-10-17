@@ -228,6 +228,7 @@ export class Workbench {
     else this.tabs.showHome();
 
     this.installKeys();
+    import("./macos").then((m) => m.checkQuarantine()).catch(() => {});
     this.renderStatus();
     this.updateTitle();
     touchRecent(this.root, this.git.branch ?? undefined);
