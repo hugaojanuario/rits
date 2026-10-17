@@ -2,6 +2,7 @@ pub mod airflow;
 pub mod audit;
 pub mod jupyter;
 pub mod dbt;
+pub mod export;
 pub mod secrets;
 pub mod db;
 pub mod store;
@@ -311,6 +312,7 @@ pub fn run() {
         .manage(jupyter::JupyterState::default())
         .manage(dbt::DbtState::default())
         .manage(audit::AuditState::default())
+        .manage(export::ExportState::default())
         .invoke_handler(tauri::generate_handler![
             list_connections,
             save_connection,
@@ -405,6 +407,9 @@ pub fn run() {
             dbt::dbt_project_profile,
             dbt::dbt_artifacts,
             dbt::dbt_compiled,
+            export::export_query,
+            export::export_cancel,
+            export::write_base64_file,
             audit::audit_capabilities,
             audit::audit_projects,
             audit::audit_load,

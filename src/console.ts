@@ -146,9 +146,11 @@ export function createConsole(
       copyAsInsert: (rows) => rowsToInsert(conn.kind, guessTable(sqlText), r.columns, rows.map((i) => r.rows[i])),
     });
     grid.setData(r.columns, r.rows);
-    const exportBtn = h("button.tool-btn", { title: "Exportar" }, icon("export"));
+    const exportBtn = h("button.btn.small.export-btn", { title: "Exportar o resultado (CSV, Excel, JSON, XML…)" }, icon("export"), "Exportar", icon("general/chevronDown"));
     exportBtn.onclick = () =>
-      exportMenu(exportBtn, () => ({ columns: r.columns, rows: r.rows }), conn.kind, guessTable(sqlText).replace(/[`"]/g, "") || "resultado");
+      exportMenu(exportBtn, () => ({ columns: r.columns, rows: r.rows }), conn.kind, guessTable(sqlText).replace(/[`"]/g, "") || "resultado", undefined, {
+        full: { connId: conn.id, db: state.db, sql: sqlText, truncated: r.truncated },
+      });
     const info = h(
       "div.result-info",
       null,

@@ -1210,6 +1210,10 @@ body.tw-dragging, body.tw-dragging * { cursor: grabbing !important; user-select:
 .glass .afd-node { border-radius: 10px; box-shadow: var(--rim), 0 2px 8px rgba(0, 0, 0, 0.15); }
 
 
+/* query export */
+.export-btn { gap: 4px; padding: 0 8px; }
+.export-progress { position: fixed; right: 16px; bottom: 40px; z-index: 900; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--popup); border: 1px solid var(--border-2); box-shadow: var(--shadow); font-size: 12.5px; }
+
 /* ===================== Optional data plugins: Jupyter, dbt, Migration Audit ===================== */
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .tag.err { background: var(--danger-soft); color: var(--danger); }

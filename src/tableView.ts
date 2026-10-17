@@ -40,7 +40,7 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
   const submitBtn = h("button.tool-btn.text.submit", { title: "Gravar alterações (Ctrl+Enter)", disabled: true, onclick: () => submit() }, icon("check"), "Gravar");
   const revertBtn = h("button.tool-btn", { title: "Desfazer alterações", disabled: true, onclick: () => grid.revert() }, icon("undo"));
   const previewBtn = h("button.tool-btn", { title: "Ver SQL das alterações", disabled: true, onclick: () => preview() }, icon("ddl"));
-  const exportBtn = h("button.tool-btn", { title: "Exportar" }, icon("export"));
+  const exportBtn = h("button.btn.small.export-btn", { title: "Exportar os dados (CSV, Excel, JSON, XML…)" }, icon("export"), "Exportar", icon("general/chevronDown"));
   const sizeSel = h(
     "select.select.small",
     {
@@ -110,7 +110,11 @@ export function createTableView(conn: ConnConfig, ref: ObjectRef, onOpenConsole:
     },
     copyAsInsert: (rows) => rowsToInsert(k, fq, grid.columns, rows.map((r) => grid.rows[r])),
   });
-  exportBtn.onclick = () => exportMenu(exportBtn, () => ({ columns: grid.columns, rows: grid.rows }), k, ref.name, fq);
+  exportBtn.onclick = () =>
+    exportMenu(exportBtn, () => ({ columns: grid.columns, rows: grid.rows }), k, ref.name, fq, {
+      // the whole table (with the current WHERE/ORDER BY), not only the loaded page
+      full: { connId: conn.id, db: ref.db, sql: `SELECT * FROM ${fq}${whereI.value.trim() ? ` WHERE ${whereI.value.trim()}` : ""}${orderI.value.trim() ? ` ORDER BY ${orderI.value.trim()}` : ""}`, truncated: true },
+    });
 
   const dataPane = h("div.data-pane", null, filterBar, grid.el);
   const colsPane = h("div.info-pane");
