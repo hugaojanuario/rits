@@ -50,7 +50,7 @@ export const islandsHighlight = HighlightStyle.define([
 export const islandsTheme = EditorView.theme({
   "&": { height: "100%", fontSize: "var(--editor-font-size)", backgroundColor: "var(--editor-bg)", color: "var(--editor-fg)" },
   ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "1.6", fontVariantLigatures: "contextual" },
-  ".cm-content": { caretColor: "var(--icon)", padding: "10px 0 40vh" },
+  ".cm-content": { caretColor: "var(--icon)", padding: "calc(10px + 1.6em) 0 40vh" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--icon)", borderLeftWidth: "2px" },
   ".cm-gutters": { backgroundColor: "var(--editor-bg)", color: "var(--editor-gutter-fg)", border: "none", paddingLeft: "6px" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 6px", minWidth: "36px" },

@@ -27,7 +27,7 @@ const highlight = HighlightStyle.define([
 const baseTheme = EditorView.theme({
   "&": { height: "100%", fontSize: "var(--editor-font-size)", backgroundColor: "var(--editor-bg)", color: "var(--fg)" },
   ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "1.55" },
-  ".cm-content": { caretColor: "var(--accent)", paddingTop: "8px" },
+  ".cm-content": { caretColor: "var(--accent)", paddingTop: "calc(8px + 1.55em)" },
   ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "2px" },
   ".cm-gutters": { backgroundColor: "var(--editor-bg)", color: "var(--fg-dim)", border: "none" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--fg)" },
