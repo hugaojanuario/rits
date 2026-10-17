@@ -115,7 +115,7 @@ Clique no **microfone** ao lado da caixa de texto e fale: o texto aparece enquan
 
 A transcrição usa o reconhecimento de fala do próprio sistema, sem baixar modelos e sem chave de API:
 
-- **macOS**: o reconhecimento de fala do macOS. Na primeira vez, o sistema pede permissão para o **Microfone** e para o **Reconhecimento de Fala**. Quando o idioma tem reconhecimento no próprio Mac, o áudio não sai do computador.
+- **macOS**: o reconhecimento de fala do macOS, sempre tentado primeiro **no próprio Mac** (o áudio não sai do computador). Isso funciona mesmo com a Siri e o Ditado desligados, desde que o idioma esteja baixado (Ajustes do Sistema › Teclado › Ditado › Idiomas). Sem o idioma local, o Rits usa os servidores da Apple, e aí o Ditado precisa estar ligado. Na primeira vez, o sistema pede permissão para o **Microfone** e para o **Reconhecimento de Fala**. Como o app não é notarizado, o macOS pode pedir de novo depois de uma atualização.
 - **Windows**: o reconhecimento de fala do Windows (ditado). Precisa de **Reconhecimento de fala online** ligado em Configurações › Privacidade e segurança › Fala, e do microfone liberado para aplicativos da área de trabalho.
 
 O microfone só fica ligado enquanto o botão está vermelho.
@@ -137,5 +137,6 @@ O microfone só fica ligado enquanto o botão está vermelho.
 | erro de esforço não suportado | escolha **Esforço: padrão** ou outro nível |
 | `/` não mostra uma skill nova | troque de agente e volte, ou reabra o painel (a lista é lida uma vez por agente) |
 | o ditado diz que não tem permissão | macOS: Ajustes do Sistema › Privacidade e Segurança › Microfone e Reconhecimento de Fala; Windows: Configurações › Privacidade e segurança › Fala e Microfone |
+| "O Ditado do macOS está desligado…" | baixe o idioma em Ajustes do Sistema › Teclado › Ditado (funciona sem ligar a Siri) ou ligue o Ditado |
 | o ditado não reconhece o idioma | botão direito no microfone e escolha o idioma; no Windows, instale o pacote de fala em Configurações › Hora e idioma › Fala |
 | o agente não usa o contexto | peça explicitamente: "use as ferramentas do Rits" |

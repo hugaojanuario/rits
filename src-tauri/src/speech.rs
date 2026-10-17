@@ -60,6 +60,9 @@ mod imp {
     use objc2_foundation::{NSError, NSLocale, NSString};
     use objc2_speech::{SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionResult, SFSpeechRecognitionTask, SFSpeechRecognizer, SFSpeechRecognizerAuthorizationStatus};
     use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Arc;
     use std::ptr::NonNull;
     use std::sync::mpsc;
     use std::time::Duration;
@@ -71,12 +74,31 @@ mod imp {
         input: Retained<AVAudioInputNode>,
         request: Retained<SFSpeechAudioBufferRecognitionRequest>,
         task: Retained<SFSpeechRecognitionTask>,
-        _recognizer: Retained<SFSpeechRecognizer>,
     }
 
     thread_local! {
         // lives on the main thread only (AppKit objects, audio engine)
         static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
+        // a stopped session whose task is still delivering the final text
+        static FINISHING: RefCell<Option<Retained<SFSpeechRecognitionTask>>> = const { RefCell::new(None) };
+        // one recognizer per language, reused: right after creation a recognizer may report no
+        // on-device support yet, which used to send the second dictation to Apple's servers
+        static RECOGNIZERS: RefCell<HashMap<String, Retained<SFSpeechRecognizer>>> = RefCell::new(HashMap::new());
+    }
+
+    /// Generation of the current session: callbacks of older tasks (canceled or finishing late)
+    /// must not touch the chat of a newer one.
+    static GEN: AtomicU64 = AtomicU64::new(0);
+
+    const DICTATION_OFF: &str = "O Ditado do macOS está desligado e este idioma não está disponível para reconhecimento no próprio Mac. Ative o Ditado em Ajustes do Sistema › Teclado › Ditado (lá também dá para baixar o idioma para uso sem internet) e tente de novo.";
+
+    fn explain(e: &NSError) -> String {
+        let msg = e.localizedDescription().to_string();
+        if msg.contains("Siri") || msg.contains("Dictation") || msg.contains("Ditado") {
+            DICTATION_OFF.into()
+        } else {
+            format!("Reconhecimento de fala do macOS: {msg}")
+        }
     }
 
     const SPEECH_DENIED: &str = "O Rits não tem permissão para o reconhecimento de fala. Libere em Ajustes do Sistema › Privacidade e Segurança › Reconhecimento de Fala e tente de novo.";
@@ -144,24 +166,42 @@ mod imp {
     }
 
     /// Runs on the main thread.
-    fn begin(app: AppHandle, owner: String, lang: String) -> Result<(), String> {
+    fn recognizer(lang: &str) -> Option<Retained<SFSpeechRecognizer>> {
+        RECOGNIZERS.with(|cell| {
+            if let Some(r) = cell.borrow().get(lang) {
+                return Some(r.clone());
+            }
+            let locale = NSLocale::initWithLocaleIdentifier(NSLocale::alloc(), &NSString::from_str(&lang.replace('-', "_")));
+            let r = unsafe { SFSpeechRecognizer::initWithLocale(SFSpeechRecognizer::alloc(), &locale) }?;
+            cell.borrow_mut().insert(lang.to_string(), r.clone());
+            Some(r)
+        })
+    }
+
+    /// `attempt` 0 and 1 recognize on the Mac (the audio does not leave it); when both fail
+    /// before any text, attempt 2 goes through Apple's servers (needs Dictation on).
+    fn begin(app: AppHandle, owner: String, lang: String, attempt: u8) -> Result<(), String> {
+        let on_device = attempt < 2;
+        let gen = GEN.fetch_add(1, Ordering::SeqCst) + 1;
         SESSION.with(|cell| {
             if let Some(old) = cell.borrow_mut().take() {
                 tear_down(&old, false);
             }
         });
+        // the previous dictation may still hold the local recognizer
+        FINISHING.with(|f| {
+            if let Some(t) = f.borrow_mut().take() {
+                unsafe { t.cancel() };
+            }
+        });
         unsafe {
-            let locale = NSLocale::initWithLocaleIdentifier(NSLocale::alloc(), &NSString::from_str(&lang.replace('-', "_")));
-            let recognizer = SFSpeechRecognizer::initWithLocale(SFSpeechRecognizer::alloc(), &locale).ok_or_else(|| format!("O reconhecimento de fala do macOS não suporta o idioma {lang}."))?;
-            if !recognizer.isAvailable() {
-                return Err("O reconhecimento de fala está indisponível agora. Verifique a conexão com a internet ou ative o Ditado em Ajustes do Sistema › Teclado.".into());
+            let recognizer = recognizer(&lang).ok_or_else(|| format!("O reconhecimento de fala do macOS não suporta o idioma {lang}."))?;
+            if !on_device && !recognizer.isAvailable() {
+                return Err(DICTATION_OFF.into());
             }
             let request = SFSpeechAudioBufferRecognitionRequest::new();
             request.setShouldReportPartialResults(true);
-            // on-device when available: the audio does not leave the Mac
-            if recognizer.supportsOnDeviceRecognition() {
-                request.setRequiresOnDeviceRecognition(true);
-            }
+            request.setRequiresOnDeviceRecognition(on_device);
             if request.respondsToSelector(sel!(setAddsPunctuation:)) {
                 request.setAddsPunctuation(true);
             }
@@ -183,29 +223,48 @@ mod imp {
                 return Err(format!("Não foi possível abrir o microfone: {}", e.localizedDescription()));
             }
 
-            let (app2, owner2) = (app.clone(), owner.clone());
+            let (app2, owner2, lang2) = (app.clone(), owner.clone(), lang.clone());
+            let heard = Arc::new(AtomicBool::new(false));
             let handler = RcBlock::new(move |result: *mut SFSpeechRecognitionResult, error: *mut NSError| {
+                if GEN.load(Ordering::SeqCst) != gen {
+                    return;
+                }
                 let mut done = false;
                 if let Some(r) = result.as_ref() {
                     let text = r.bestTranscription().formattedString().to_string();
                     let fin = r.isFinal();
+                    heard.store(true, Ordering::SeqCst);
                     send(&app2, &owner2, "text", text, fin);
                     done = fin;
                 }
                 if let Some(e) = error.as_ref() {
-                    // 1110: no speech; 216/301: canceled by the user — a plain end, not an error
+                    // 1110: no speech; 216/301/203: canceled — a plain end, not an error
                     let code = e.code();
                     if [1110, 216, 301, 203].contains(&code) {
                         send(&app2, &owner2, "end", String::new(), true);
+                    } else if on_device && !heard.load(Ordering::SeqCst) {
+                        // the Mac could not do it locally: once more through Apple's servers
+                        let (a, o, l) = (app2.clone(), owner2.clone(), lang2.clone());
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(if attempt == 0 { 400 } else { 0 }));
+                            let a2 = a.clone();
+                            let _ = a2.run_on_main_thread(move || {
+                                if GEN.load(Ordering::SeqCst) == gen {
+                                    if let Err(msg) = begin(a.clone(), o.clone(), l, attempt + 1) {
+                                        send(&a, &o, "error", msg, true);
+                                    }
+                                }
+                            });
+                        });
                     } else {
-                        send(&app2, &owner2, "error", e.localizedDescription().to_string(), true);
+                        send(&app2, &owner2, "error", explain(e), true);
                     }
                 } else if done {
                     send(&app2, &owner2, "end", String::new(), true);
                 }
             });
             let task = recognizer.recognitionTaskWithRequest_resultHandler(&request, &handler);
-            SESSION.with(|cell| *cell.borrow_mut() = Some(Session { owner, engine, input, request, task, _recognizer: recognizer }));
+            SESSION.with(|cell| *cell.borrow_mut() = Some(Session { owner, engine, input, request, task }));
         }
         Ok(())
     }
@@ -215,7 +274,7 @@ mod imp {
         let (tx, rx) = mpsc::channel();
         let app2 = app.clone();
         app.run_on_main_thread(move || {
-            let _ = tx.send(begin(app2, owner, lang));
+            let _ = tx.send(begin(app2, owner, lang, 0));
         })
         .map_err(|e| e.to_string())?;
         wait(rx).await.unwrap_or_else(|| Err("O reconhecimento de fala não respondeu.".into()))
@@ -226,7 +285,7 @@ mod imp {
             SESSION.with(|cell| {
                 if let Some(s) = cell.borrow_mut().take() {
                     tear_down(&s, true);
-                    // the task keeps itself alive until it delivers the final result
+                    FINISHING.with(|f| *f.borrow_mut() = Some(s.task));
                 }
             })
         })
@@ -240,6 +299,7 @@ mod imp {
                 let mine = cell.borrow().as_ref().is_some_and(|s| s.owner == owner);
                 if mine {
                     if let Some(s) = cell.borrow_mut().take() {
+                        GEN.fetch_add(1, Ordering::SeqCst);
                         tear_down(&s, false);
                     }
                 }
@@ -253,6 +313,7 @@ mod imp {
 #[cfg(windows)]
 mod imp {
     use super::send;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use tauri::AppHandle;
@@ -263,6 +324,15 @@ mod imp {
         ISpeechRecognitionConstraint, SpeechContinuousRecognitionCompletedEventArgs, SpeechContinuousRecognitionResultGeneratedEventArgs, SpeechContinuousRecognitionSession, SpeechRecognitionHypothesisGeneratedEventArgs,
         SpeechRecognitionResultStatus, SpeechRecognitionScenario, SpeechRecognitionTopicConstraint, SpeechRecognizer,
     };
+
+    /// Generation of the current session: a canceled one must not end the next in the chat.
+    static GEN: AtomicU64 = AtomicU64::new(0);
+
+    fn emit(app: &AppHandle, owner: &str, gen: u64, kind: &'static str, text: String, is_final: bool) {
+        if GEN.load(Ordering::SeqCst) == gen {
+            send(app, owner, kind, text, is_final);
+        }
+    }
 
     struct Active {
         owner: String,
@@ -293,7 +363,7 @@ mod imp {
     }
 
     /// Dedicated MTA thread: WinRT blocking waits are not allowed on the UI (STA) thread.
-    fn run(app: AppHandle, owner: String, lang: String, ready: mpsc::Sender<Result<(), String>>, stop: mpsc::Receiver<bool>) {
+    fn run(app: AppHandle, owner: String, gen: u64, lang: String, ready: mpsc::Sender<Result<(), String>>, stop: mpsc::Receiver<bool>) {
         let setup = || -> windows::core::Result<(SpeechRecognizer, SpeechContinuousRecognitionSession, Option<String>)> {
             let rec = match Language::CreateLanguage(&HSTRING::from(lang.as_str())).and_then(|l| SpeechRecognizer::Create(&l)) {
                 Ok(r) => r,
@@ -321,7 +391,7 @@ mod imp {
             if let Some(a) = args.as_ref() {
                 let h = a.Hypothesis()?.Text()?.to_string();
                 let all = join(&f1.lock().unwrap_or_else(|p| p.into_inner()), &h);
-                send(&a1, &o1, "text", all, false);
+                emit(&a1, &o1, gen, "text", all, false);
             }
             Ok(())
         }));
@@ -331,15 +401,15 @@ mod imp {
                 let t = a.Result()?.Text()?.to_string();
                 let mut f = f2.lock().unwrap_or_else(|p| p.into_inner());
                 *f = join(&f, &t);
-                send(&a2, &o2, "text", f.clone(), true);
+                emit(&a2, &o2, gen, "text", f.clone(), true);
             }
             Ok(())
         }));
         let (a3, o3) = (app.clone(), owner.clone());
         let _ = session.Completed(&TypedEventHandler::new(move |_, args: windows::core::Ref<SpeechContinuousRecognitionCompletedEventArgs>| {
             match args.as_ref().and_then(|a| a.Status().ok()).and_then(status_text) {
-                Some(err) => send(&a3, &o3, "error", err, true),
-                None => send(&a3, &o3, "end", String::new(), true),
+                Some(err) => emit(&a3, &o3, gen, "error", err, true),
+                None => emit(&a3, &o3, gen, "end", String::new(), true),
             }
             Ok(())
         }));
@@ -351,13 +421,14 @@ mod imp {
         let finish = stop.recv().unwrap_or(false);
         let _ = if finish { session.StopAsync().and_then(|op| op.join()) } else { session.CancelAsync().and_then(|op| op.join()) };
         if !finish {
-            send(&app, &owner, "end", String::new(), true);
+            emit(&app, &owner, gen, "end", String::new(), true);
         }
         let _ = rec.Close();
     }
 
     pub async fn start(app: AppHandle, owner: String, lang: String) -> Result<(), String> {
         cancel_all();
+        let gen = GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let (ready_tx, ready_rx) = mpsc::channel();
         let (stop_tx, stop_rx) = mpsc::channel();
         let o = owner.clone();
@@ -365,7 +436,7 @@ mod imp {
             unsafe {
                 let _ = windows::Win32::System::WinRT::RoInitialize(windows::Win32::System::WinRT::RO_INIT_MULTITHREADED);
             }
-            run(app, o, lang, ready_tx, stop_rx);
+            run(app, o, gen, lang, ready_tx, stop_rx);
         });
         let r = tokio::task::spawn_blocking(move || ready_rx.recv_timeout(std::time::Duration::from_secs(60)).unwrap_or_else(|_| Err("O reconhecimento de fala do Windows não respondeu.".into())))
             .await

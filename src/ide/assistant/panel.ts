@@ -123,7 +123,7 @@ export class AssistantTools implements PluginHandle {
   private sugIdx = 0;
   private sugRange: { from: number; to: number } | null = null;
   private micBtn!: HTMLButtonElement;
-  private dictation: { base: string; off: Promise<UnlistenFn> } | null = null;
+  private dictation: { base: string; off: Promise<UnlistenFn>; stopping?: boolean } | null = null;
 
   constructor(readonly wb: Workbench) {
     this.state = { provider: (pref("provider", "claude") as ProviderId) || "claude", sessions: {}, messages: [] };
@@ -763,7 +763,9 @@ export class AssistantTools implements PluginHandle {
   // ---------------- dictation ----------------
 
   private async toggleDictation() {
-    if (this.dictation) return this.stopDictation(false);
+    if (this.dictation && !this.dictation.stopping) return this.stopDictation(false);
+    // stopped a moment ago and still waiting for the final text: start over now
+    if (this.dictation) this.endDictation();
     const lang = pref("speechLang", "pt-BR");
     const v = this.input.value;
     const base = v && !/\s$/.test(v) ? v + " " : v;
@@ -794,6 +796,8 @@ export class AssistantTools implements PluginHandle {
   /** cancel: the final text is not awaited (plugin disposed). */
   private async stopDictation(cancel: boolean) {
     if (!this.dictation) return;
+    this.dictation.stopping = true;
+    this.micBtn.classList.remove("on");
     await invoke("speech_stop").catch(() => {});
     // the final text arrives right after the stop; on cancel (or if it never comes) end now
     if (cancel) this.endDictation();
