@@ -42,6 +42,16 @@ unicode-normalization = "0.1"
 # Transparent windows (Liquid Glass / vibrancy) need the private API on macOS only.
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
+# AI assistant dictation: Speech framework + the microphone through AVAudioEngine.
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSLocale", "NSError", "NSObject"] }
+objc2-speech = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-avf-audio", "SFErrors", "SFSpeechRecognitionRequest", "SFSpeechRecognitionResult", "SFSpeechRecognitionTask", "SFSpeechRecognizer", "SFTranscription"] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "block2", "AVAudioEngine", "AVAudioNode", "AVAudioIONode", "AVAudioFormat", "AVAudioBuffer", "AVAudioTypes", "AVAudioTime", "AVAudioApplication"] }
+
+# AI assistant dictation on Windows: WinRT speech recognition (same windows crate Tauri uses).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Foundation", "Globalization", "Media_SpeechRecognition", "Win32_System_WinRT"] }
 
 [profile.release]
 opt-level = "s"

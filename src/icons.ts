@@ -91,6 +91,8 @@ const custom: Record<string, string> = {
   auditTw: C(`<circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2l4 4M4.8 6.9l1.4 1.4 2.6-2.8"/>`, 20),
   // AI assistant: a chat balloon with a spark (own drawing)
   ai: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#A08CFF" stroke-linejoin="round" stroke-linecap="round"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v6a1.5 1.5 0 0 1-1.5 1.5H7l-3 3v-3h-.5A1.5 1.5 0 0 1 2 9.5z" fill="#A08CFF" fill-opacity=".15"/><path d="M8 4.2l.7 1.8 1.8.7-1.8.7L8 9.2l-.7-1.8-1.8-.7 1.8-.7z" fill="#A08CFF"/></svg>`,
+  // microphone of the dictation button (own drawing)
+  mic: C(`<rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3.2 7.3a4.8 4.8 0 0 0 9.6 0M8 12.1v2.4M5.6 14.5h4.8"/>`),
   aiTw: C(`<path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v6a1.5 1.5 0 0 1-1.5 1.5H7l-3 3v-3h-.5A1.5 1.5 0 0 1 2 9.5z"/><path d="M8 4.2l.7 1.8 1.8.7-1.8.7L8 9.2l-.7-1.8-1.8-.7 1.8-.7z"/>`, 20),
   airflowTw: C(`<path d="M10 10c0-3.6 1.2-6.9 4.3-7.6.9 2.8-1.2 5.9-4.3 7.6zM10 10c3.6 0 6.9 1.2 7.6 4.3-2.8.9-5.9-1.2-7.6-4.3zM10 10c0 3.6-1.2 6.9-4.3 7.6-.9-2.8 1.2-5.9 4.3-7.6zM10 10c-3.6 0-6.9-1.2-7.6-4.3 2.8-.9 5.9 1.2 7.6 4.3z" transform="scale(.8)"/>`, 20),
   terraform: `<svg width="16" height="16" viewBox="0 0 16 16" fill="#8A6CE8"><path d="M5.6 2.6l4.2 2.4v4.8L5.6 7.4z"/><path d="M10.4 5v4.8l4.2-2.4V2.6z" opacity=".7"/><path d="M1.2.2l4 2.3v4.8l-4-2.3zM5.6 8.2l4.2 2.4v4.8l-4.2-2.4z"/></svg>`,

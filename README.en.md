@@ -163,6 +163,9 @@ A **chat inside the IDE** with your own Claude Code or Codex, like the official 
 - Uses the **official CLI and your account** (subscription or API key). Rits has no server of its own: nothing goes through it.
 - The agent sees the IDE through a **local MCP server** (`127.0.0.1`, one token per chat): project, active file, selection and unsaved changes, LSP problems, Git, **connected databases** (structure and queries in a read-only transaction), **Airflow DAGs, runs and logs**, **dbt** results, **notebook** cells, **Docker** containers and **Migration Audit** runs. Passwords and tokens are never handed over.
 - Streaming answers, a card for each tool used, code blocks with **Copy** and **Insert at cursor**, active file and selection attached with one click.
+- **Model, version and effort** picked in the panel (Fable, Opus, Sonnet, Haiku, always the newest or a pinned version; the models and reasoning levels of your Codex account).
+- **/** opens the commands and skills of the project, the user and plugins; **@** finds project files and folders and sends their content along (unsaved edits included).
+- **Dictation**: click the microphone and speak; the text appears as you talk, using the speech recognition built into macOS or Windows (no API key).
 - Permissions: read-only, **edit with approval** (each Claude Code edit or command shows up in the chat with the diff and Allow/Deny buttons) or edit automatically. Each project's chat resumes where it stopped.
 
 Full guide (Portuguese): [docs/assistente-ia.md](docs/assistente-ia.md).

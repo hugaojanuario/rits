@@ -108,3 +108,49 @@ async fn real_claude_code_uses_ide_tool() {
     assert!(result["result"].as_str().unwrap_or("").to_lowercase().contains("pagila"), "{result}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn frontmatter_fields() {
+    use rits_lib::assistant::frontmatter;
+    assert_eq!(frontmatter("---\nname: revisar\ndescription: \"Revisa o diff\"\n---\ncorpo"), (Some("revisar".into()), "Revisa o diff".into()));
+    assert_eq!(frontmatter("---\ndescription: >\n  Linha um\n  linha dois\nname: x\n---\n"), (Some("x".into()), "Linha um linha dois".into()));
+    // no frontmatter: first line of the body, without the heading marks
+    assert_eq!(frontmatter("\u{feff}\n# Gerar testes\n\nfaça…"), (None, "Gerar testes".into()));
+}
+
+#[test]
+fn slash_commands_of_both_agents() {
+    use rits_lib::assistant::list_commands;
+    let base = std::env::temp_dir().join(format!("rits-slash-{}", std::process::id()));
+    let (home, root) = (base.join("home"), base.join("proj"));
+    let w = |p: std::path::PathBuf, t: &str| {
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, t).unwrap();
+    };
+    w(root.join(".claude/commands/deploy.md"), "---\ndescription: Publica\n---\n$ARGUMENTS");
+    w(root.join(".claude/commands/db/migrar.md"), "Roda as migrações");
+    w(root.join(".claude/skills/dados/SKILL.md"), "---\nname: dados\ndescription: Explora dados\n---\n");
+    w(home.join(".claude/commands/deploy.md"), "---\ndescription: do usuário (ignorado)\n---\n");
+    w(home.join(".claude/skills/.oculta/SKILL.md"), "---\nname: oculta\n---\n");
+    let plugin = base.join("plugins/cache/pg/1.0");
+    w(plugin.join("skills/tunar/SKILL.md"), "---\nname: tunar\ndescription: Ajusta queries\n---\n");
+    w(home.join(".claude/plugins/installed_plugins.json"), &serde_json::json!({"version": 2, "plugins": {"pg@market": [{"installPath": plugin.to_string_lossy()}]}}).to_string());
+    w(root.join(".agents/skills/limpar/SKILL.md"), "---\nname: limpar\ndescription: Limpa\n---\n");
+    w(home.join(".codex/prompts/explicar.md"), "---\ndescription: Explica\n---\nExplique $ARGUMENTS");
+
+    let claude = list_commands(&home, &root, "claude");
+    let names: Vec<_> = claude.iter().map(|c| (c.name.as_str(), c.kind, c.source.as_str(), c.description.as_str())).collect();
+    assert_eq!(
+        names,
+        vec![
+            ("db:migrar", "command", "projeto", "Roda as migrações"),
+            ("deploy", "command", "projeto", "Publica"),
+            ("dados", "skill", "projeto", "Explora dados"),
+            ("pg:tunar", "skill", "plugin pg", "Ajusta queries"),
+        ]
+    );
+    let codex = list_commands(&home, &root, "codex");
+    let names: Vec<_> = codex.iter().map(|c| (c.name.as_str(), c.kind)).collect();
+    assert_eq!(names, vec![("limpar", "skill"), ("explicar", "prompt")]);
+    std::fs::remove_dir_all(&base).ok();
+}

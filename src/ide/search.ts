@@ -12,14 +12,14 @@ import type { Workbench } from "./workbench";
 import { displayShortcut } from "./keymap";
 
 let fileCache: { root: string; at: number; files: string[] } | null = null;
-async function projectFiles(wb: Workbench) {
+export async function projectFiles(wb: Workbench) {
   if (!fileCache || fileCache.root !== wb.root || Date.now() - fileCache.at > 15000) {
     fileCache = { root: wb.root, at: Date.now(), files: await host.files(wb.root) };
   }
   return fileCache.files;
 }
 
-function fuzzyScore(text: string, q: string): number {
+export function fuzzyScore(text: string, q: string): number {
   const t = text.toLowerCase();
   if (!q) return 1;
   if (t === q) return 1000;

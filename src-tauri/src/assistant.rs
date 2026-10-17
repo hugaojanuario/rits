@@ -348,3 +348,127 @@ pub async fn db_query(cfg: crate::store::ConnConfig, db: String, sql: String, ma
         Err(e) => Err(e),
     }
 }
+
+// ---------------- slash commands and skills ----------------
+
+/// An entry of the "/" menu of the chat: a custom command, a skill or (Codex) a saved prompt.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct SlashCommand {
+    pub name: String,
+    pub description: String,
+    /// "command" | "skill" | "prompt"
+    pub kind: &'static str,
+    /// "projeto", "usuário" or "plugin <name>"
+    pub source: String,
+    pub path: String,
+}
+
+/// `name` and `description` of the YAML frontmatter (plain, quoted and folded values); the
+/// description falls back to the first line of the body.
+pub fn frontmatter(text: &str) -> (Option<String>, String) {
+    let text = text.trim_start_matches('\u{feff}');
+    let (head, body) = match text.strip_prefix("---") {
+        Some(rest) => match rest.find("\n---") {
+            Some(end) => (&rest[..end], &rest[end + 4..]),
+            None => ("", text),
+        },
+        None => ("", text),
+    };
+    let lines: Vec<&str> = head.lines().collect();
+    let field = |key: &str| -> Option<String> {
+        let i = lines.iter().position(|l| l.strip_prefix(key).is_some_and(|r| r.trim_start().starts_with(':')))?;
+        let v = lines[i].split_once(':')?.1.trim();
+        let v = if v.is_empty() || v.starts_with('>') || v.starts_with('|') {
+            lines[i + 1..].iter().take_while(|l| l.starts_with(' ') || l.starts_with('\t') || l.trim().is_empty()).map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
+        } else {
+            v.trim_matches(|c| c == '"' || c == '\'').to_string()
+        };
+        (!v.is_empty()).then_some(v)
+    };
+    let desc = field("description").unwrap_or_else(|| body.lines().map(|l| l.trim().trim_start_matches('#').trim()).find(|l| !l.is_empty()).unwrap_or("").to_string());
+    let desc = if desc.chars().count() > 160 { format!("{}…", desc.chars().take(160).collect::<String>()) } else { desc };
+    (field("name"), desc)
+}
+
+fn read_head(p: &std::path::Path) -> Option<String> {
+    use std::io::Read;
+    let mut buf = Vec::new();
+    std::fs::File::open(p).ok()?.take(16 * 1024).read_to_end(&mut buf).ok()?;
+    Some(String::from_utf8_lossy(&buf).into_owned())
+}
+
+/// `<dir>/**/*.md` (subfolders become "a:b", like Claude Code).
+fn scan_commands(dir: &std::path::Path, prefix: &str, kind: &'static str, source: &str, out: &mut Vec<SlashCommand>, depth: usize) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = rd.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for e in entries {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let p = e.path();
+        if p.is_dir() && depth < 3 {
+            scan_commands(&p, &format!("{prefix}{name}:"), kind, source, out, depth + 1);
+        } else if let Some(stem) = name.strip_suffix(".md") {
+            let (_, description) = read_head(&p).map(|t| frontmatter(&t)).unwrap_or_default();
+            out.push(SlashCommand { name: format!("{prefix}{stem}"), description, kind, source: source.into(), path: crate::fsx::norm(&p) });
+        }
+    }
+}
+
+/// `<dir>/<skill>/SKILL.md`.
+fn scan_skills(dir: &std::path::Path, prefix: &str, source: &str, out: &mut Vec<SlashCommand>) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = rd.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for e in entries {
+        let dir_name = e.file_name().to_string_lossy().to_string();
+        let file = e.path().join("SKILL.md");
+        if dir_name.starts_with('.') || !file.is_file() {
+            continue;
+        }
+        let (name, description) = read_head(&file).map(|t| frontmatter(&t)).unwrap_or_default();
+        out.push(SlashCommand { name: format!("{prefix}{}", name.unwrap_or(dir_name)), description, kind: "skill", source: source.into(), path: crate::fsx::norm(&file) });
+    }
+}
+
+/// Commands and skills the CLI of `provider` would find for this project. Project entries come
+/// first and win over user entries with the same name.
+pub fn list_commands(home: &std::path::Path, root: &std::path::Path, provider: &str) -> Vec<SlashCommand> {
+    let mut out = Vec::new();
+    if provider == "codex" {
+        scan_skills(&root.join(".agents/skills"), "", "projeto", &mut out);
+        scan_skills(&root.join(".codex/skills"), "", "projeto", &mut out);
+        scan_skills(&home.join(".agents/skills"), "", "usuário", &mut out);
+        scan_skills(&home.join(".codex/skills"), "", "usuário", &mut out);
+        scan_commands(&home.join(".codex/prompts"), "", "prompt", "usuário", &mut out, 3);
+    } else {
+        scan_commands(&root.join(".claude/commands"), "", "command", "projeto", &mut out, 0);
+        scan_skills(&root.join(".claude/skills"), "", "projeto", &mut out);
+        scan_commands(&home.join(".claude/commands"), "", "command", "usuário", &mut out, 0);
+        scan_skills(&home.join(".claude/skills"), "", "usuário", &mut out);
+        // plugins installed through /plugin: their skills and commands are "plugin:name"
+        let installed = std::fs::read_to_string(home.join(".claude/plugins/installed_plugins.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+        if let Some(map) = installed.as_ref().and_then(|v| v.get("plugins")).and_then(|v| v.as_object()) {
+            for (key, entries) in map {
+                let plugin = key.split('@').next().unwrap_or(key);
+                let Some(path) = entries.as_array().and_then(|a| a.last()).and_then(|e| e.get("installPath")).and_then(|p| p.as_str()) else { continue };
+                let base = std::path::Path::new(path);
+                let source = format!("plugin {plugin}");
+                scan_commands(&base.join("commands"), &format!("{plugin}:"), "command", &source, &mut out, 2);
+                scan_skills(&base.join("skills"), &format!("{plugin}:"), &source, &mut out);
+            }
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|c| seen.insert(c.name.clone()));
+    out.truncate(1000);
+    out
+}
+
+#[tauri::command]
+pub async fn assistant_commands(app: AppHandle, root: String, provider: String) -> Result<Vec<SlashCommand>, String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    tokio::task::spawn_blocking(move || list_commands(&home, std::path::Path::new(&root), &provider)).await.map_err(|e| e.to_string())
+}

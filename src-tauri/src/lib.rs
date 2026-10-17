@@ -6,6 +6,7 @@ pub mod dbt;
 pub mod export;
 pub mod updater;
 pub mod secrets;
+pub mod speech;
 pub mod db;
 pub mod store;
 pub mod tools;
@@ -415,6 +416,9 @@ pub fn run() {
             assistant::assistant_close,
             assistant::assistant_tool_result,
             assistant::assistant_release,
+            assistant::assistant_commands,
+            speech::speech_start,
+            speech::speech_stop,
             assistant::assistant_db_query,
             updater::update_check,
             updater::update_install,
@@ -453,6 +457,7 @@ pub fn run() {
                 tauri::async_runtime::block_on(app.state::<jupyter::JupyterState>().close_owner(label));
                 tauri::async_runtime::block_on(app.state::<audit::AuditState>().cancel_owner(label));
                 tauri::async_runtime::block_on(app.state::<assistant::AssistantState>().drop_owner(label));
+                speech::cancel_owner(app, label);
             }
             if let tauri::RunEvent::Exit = event {
                 // Do not leave language servers, debuggers or programs running.

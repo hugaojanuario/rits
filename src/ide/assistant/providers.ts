@@ -15,6 +15,7 @@ export type Mode = "readonly" | "ask" | "auto";
 
 export type AgentEvent =
   | { kind: "session"; id: string }
+  | { kind: "init"; model: string; commands: string[] }
   | { kind: "delta"; text: string }
   | { kind: "text"; text: string }
   | { kind: "thinking" }
@@ -29,6 +30,8 @@ export interface StartOpts {
   token: string;
   claudeConfig: string;
   model: string;
+  /** reasoning effort ("" = the CLI default) */
+  effort: string;
   mode: Mode;
   sessionId: string | null;
   systemPrompt: string;
@@ -99,6 +102,7 @@ export class ClaudeAgent implements Agent {
       if (this.o.mode === "auto") a.push("--permission-mode", "acceptEdits");
     }
     if (this.o.model) a.push("--model", this.o.model);
+    if (this.o.effort) a.push("--effort", this.o.effort);
     if (this.o.sessionId) a.push("--resume", this.o.sessionId);
     return a;
   }
@@ -138,6 +142,7 @@ export class ClaudeAgent implements Agent {
             this.o.sessionId = e.session_id;
             this.emit({ kind: "session", id: e.session_id });
           }
+          this.emit({ kind: "init", model: String(e.model ?? ""), commands: Array.isArray(e.slash_commands) ? e.slash_commands.map(String) : [] });
           const rits = (e.mcp_servers ?? []).find((s: any) => s.name === "rits");
           if (rits && rits.status !== "connected") this.emit({ kind: "info", text: `Contexto da IDE indisponível para o agente (MCP: ${rits.status}).` });
         }
@@ -208,6 +213,7 @@ export class CodexAgent implements Agent {
     // values without quotes (TOML falls back to the literal string): safe through .cmd launchers
     const common = ["--json", "--skip-git-repo-check", "-c", `mcp_servers.rits.url=${this.o.mcpUrl}`, "-c", "mcp_servers.rits.bearer_token_env_var=RITS_MCP_TOKEN", "-c", `sandbox_mode=${this.o.mode === "readonly" ? "read-only" : "workspace-write"}`];
     if (this.o.model) common.push("-m", this.o.model);
+    if (this.o.effort) common.push("-c", `model_reasoning_effort=${this.o.effort}`);
     // Codex has no system-prompt flag: the IDE instructions go with the first message
     const prompt = this.first && !this.o.sessionId ? `${this.o.systemPrompt}\n\n---\n\n${text}` : text;
     // the prompt goes through stdin ("-"), never the command line (quotes and newlines on Windows)

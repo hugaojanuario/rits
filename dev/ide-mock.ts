@@ -51,6 +51,10 @@ const exists = (path: string) => {
 };
 const status = ["# branch.oid 8f195bc", "# branch.head main", "1 .M N... 100644 100644 100644 a b sql/consultas.sql", "? tests/test_pipeline.py", ""].join("\0");
 
+const callbacks: Record<number, (e: unknown) => void> = {};
+const listeners: Record<string, number[]> = {};
+const emit = (event: string, payload: unknown) => (listeners[event] ?? []).forEach((id) => callbacks[id]?.({ event, id, payload }));
+(window as any).__mockEmit = emit;
 const handlers: Record<string, (a: any) => unknown> = {
   env_info: () => ({ home: HOME, sep: mac ? "/" : "\\", os: mac ? "macos" : "windows", defaultShell: mac ? "/bin/zsh" : "powershell.exe", username: "hugo" }),
   window_reset: () => null,
@@ -76,7 +80,31 @@ const handlers: Record<string, (a: any) => unknown> = {
   }),
   fs_watch: () => null,
   fs_unwatch: () => null,
-  fs_files: () => [],
+  fs_files: () => {
+    const out: string[] = [];
+    const walk = (es: E[], dir: string) => es.forEach((e) => (e.isDir ? !e.ignored && walk(e.children ?? [], `${dir}/${e.name}`) : out.push(`${dir}/${e.name}`)));
+    walk(tree, ROOT);
+    return out;
+  },
+  assistant_commands: (a) =>
+    a.provider === "codex"
+      ? [{ name: "limpar-dados", description: "Limpa e valida um dataset", kind: "skill", source: "projeto", path: "" }]
+      : [
+          { name: "revisar", description: "Revisa as mudanças não commitadas", kind: "command", source: "projeto", path: "" },
+          { name: "db:migrar", description: "Gera a migração da tabela", kind: "command", source: "projeto", path: "" },
+          { name: "dados", description: "Explora um banco de dados e resume as tabelas", kind: "skill", source: "usuário", path: "" },
+          { name: "pg:tunar", description: "Sugere índices para queries lentas", kind: "skill", source: "plugin pg", path: "" },
+        ],
+  // fake dictation: a few partial results, then the final one
+  speech_start: () => {
+    const words = ["quais", "tabelas", "do", "banco", "têm", "mais", "linhas"];
+    words.forEach((_, i) => setTimeout(() => emit("speech", { kind: "text", text: words.slice(0, i + 1).join(" "), final: false }), 300 * (i + 1)));
+    return null;
+  },
+  speech_stop: () => {
+    setTimeout(() => (emit("speech", { kind: "text", text: "Quais tabelas do banco têm mais linhas?", final: true }), emit("speech", { kind: "end", text: "", final: true })), 200);
+    return null;
+  },
   which: (a) => (a.name === "claude" && params.has("ai") ? HOME + "/.local/bin/claude" : null),
   assistant_open: () => ({ port: 1, token: "t", url: "http://127.0.0.1:1/mcp", claudeConfig: "" }),
   assistant_close: () => null,
@@ -95,12 +123,12 @@ const handlers: Record<string, (a: any) => unknown> = {
   app_version: () => "0.4.2",
   update_check: () => ({ current: "0.4.2", latest: "v0.5.0", available: params.has("update"), notes: "- Assistente de IA (Claude Code / Codex)\n- Exportação de resultados\n- Correções", page: "https://github.com/hugaojanuario/rits/releases", asset: "Rits-macos-arm64.dmg", size: 11534336, supported: true }),
   "plugin:window|is_maximized": () => false,
-  "plugin:event|listen": () => 1,
+  "plugin:event|listen": (a) => ((listeners[a.event] ??= []).push(a.handler), a.handler),
   "plugin:event|unlisten": () => null,
 };
 let cb = 0;
 (window as any).__TAURI_INTERNALS__ = {
-  transformCallback: () => ++cb,
+  transformCallback: (fn: (e: unknown) => void) => ((callbacks[++cb] = fn), cb),
   unregisterCallback: () => {},
   invoke: async (cmd: string, args: any) => {
     await new Promise((r) => setTimeout(r, 10));

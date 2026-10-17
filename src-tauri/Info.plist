@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Rits usa o microfone apenas quando você clica no microfone do Assistente IA, para transcrever o que você fala.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>O Rits transcreve a sua fala no Assistente IA com o reconhecimento de fala do macOS.</string>
+</dict>
+</plist>
