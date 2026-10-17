@@ -1,6 +1,6 @@
 import { h } from "./util";
 import { icon } from "./icons";
-import { contextMenu, type MenuItem } from "./ui";
+import { confirmDialog, contextMenu, type MenuItem } from "./ui";
 
 export interface Tab {
   id: string;
@@ -87,7 +87,16 @@ export class TabManager {
   }
 
   async close(tab: Tab) {
-    if (tab.canClose && !(await tab.canClose())) return false;
+    if (tab.canClose) {
+      let ok = false;
+      try {
+        ok = await tab.canClose();
+      } catch (e) {
+        // e.g. saving the file failed (read-only or cloud-synced folder): never get stuck open
+        ok = await confirmDialog("Não foi possível salvar", `${String(e)}\n\nFechar "${tab.title}" mesmo assim? As alterações não salvas serão perdidas.`, "Fechar sem salvar", true);
+      }
+      if (!ok) return false;
+    }
     const i = this.tabs.indexOf(tab);
     if (i < 0) return true;
     this.tabs.splice(i, 1);
@@ -145,13 +154,15 @@ export class TabManager {
             "button.tab-close",
             {
               title: "Fechar (Ctrl+F4)",
-              // The tab activates on mousedown and redraws the bar: if that reached the tab, this
-              // button would be replaced before the click completes and the tab would never close.
-              onmousedown: (e: MouseEvent) => e.stopPropagation(),
-              onclick: (e: MouseEvent) => {
+              // Closes on mousedown: the tab activates (and redraws the bar) on mousedown, and in the
+              // macOS overlay title bar the mouse-up may never reach the page, so a "click" handler
+              // here never ran and the tab could not be closed with the X.
+              onmousedown: (e: MouseEvent) => {
                 e.stopPropagation();
-                this.close(t);
+                e.preventDefault();
+                if (e.button === 0 || e.button === 1) this.close(t);
               },
+              onclick: (e: MouseEvent) => e.stopPropagation(),
             },
             icon("general/closeSmall"),
           ),
