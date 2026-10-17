@@ -620,6 +620,10 @@ body.tw-dragging, body.tw-dragging * { cursor: grabbing !important; user-select:
 .toasts { position: fixed; right: 16px; bottom: 40px; display: flex; flex-direction: column; gap: 8px; z-index: 300; max-width: 440px; }
 .toast { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--popup); border: 1px solid var(--border); box-shadow: var(--shadow); white-space: pre-wrap; line-height: 1.45; user-select: text; transition: opacity 0.25s, transform 0.25s; }
 .toast.out { opacity: 0; transform: translateX(16px); }
+.toast { position: relative; padding-right: 34px; }
+.toast-close { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: none; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.6; }
+.toast-close:hover { opacity: 1; background: var(--hover); }
+.toast-close svg { width: 12px; height: 12px; }
 .toast .toast-actions { display: flex; gap: 12px; margin-top: 6px; }
 
 /* ---------- welcome screen ---------- */

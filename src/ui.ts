@@ -186,11 +186,20 @@ export function toast(text: string, kind: "info" | "error" | "ok" = "info", ms =
     document.body.append(host);
   }
   const t = h(`div.toast.${kind}` as "div", null, icon(kind === "error" ? "warn" : kind === "ok" ? "check" : "info"), h("span", null, text));
+  t.append(toastClose(t));
   host.append(t);
-  setTimeout(() => {
-    t.classList.add("out");
-    setTimeout(() => t.remove(), 300);
-  }, ms);
+  setTimeout(() => dismissToast(t), ms);
+}
+
+function dismissToast(t: HTMLElement) {
+  if (t.classList.contains("out")) return;
+  t.classList.add("out");
+  setTimeout(() => t.remove(), 300);
+}
+
+/** Small "×" in the top-right corner of a toast/notification. */
+function toastClose(t: HTMLElement) {
+  return h("button.toast-close", { title: "Fechar", "aria-label": "Fechar notificação", onclick: (e: MouseEvent) => (e.stopPropagation(), dismissToast(t)) }, icon("general/close"));
 }
 
 /** Makes `handle` resize `target` along an axis, persisting size in localStorage. */
@@ -371,9 +380,7 @@ export function notify(title: string, body: string, kind: "info" | "error" | "ok
         : null,
     ),
   );
+  t.append(toastClose(t));
   hostEl.append(t);
-  setTimeout(() => {
-    t.classList.add("out");
-    setTimeout(() => t.remove(), 300);
-  }, ms);
+  setTimeout(() => dismissToast(t), ms);
 }
