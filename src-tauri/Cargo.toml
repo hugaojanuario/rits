@@ -1,6 +1,6 @@
 [package]
 name = "rits"
-version = "0.5.2"
+version = "0.6.0"
 description = "Rits — a lightweight IDE for Python, Go and databases"
 edition = "2021"
 
