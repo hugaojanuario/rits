@@ -159,10 +159,10 @@ struct ExportProgress {
     rows: u64,
 }
 
-type RowSink<'a> = dyn FnMut(Option<Vec<String>>, Vec<Option<String>>) -> Result<(), String> + Send + 'a;
+pub type RowSink<'a> = dyn FnMut(Option<Vec<String>>, Vec<Option<String>>) -> Result<(), String> + Send + 'a;
 
 /// Runs the query read-only and calls `sink(Some(columns), [])` once, then `sink(None, row)`.
-async fn stream_query(cfg: &ConnConfig, db: &str, sql: &str, sink: &mut RowSink<'_>) -> Result<(), String> {
+pub async fn stream_query(cfg: &ConnConfig, db: &str, sql: &str, sink: &mut RowSink<'_>) -> Result<(), String> {
     let db = if db.is_empty() { cfg.default_db() } else { db.to_string() };
     match cfg.kind {
         DbKind::Postgres => {

@@ -123,6 +123,17 @@ Audits **data conversions** between a source and a target database with **determ
 
 Databases: PostgreSQL, MySQL, MariaDB, SQL Server and Firebird — all validated by real integration tests (PostgreSQL 17, MySQL 8.4, MariaDB 11.8, SQL Server 2022, Firebird 5). Limitations: MongoDB is out of this version; on SQL Server custom queries do not run in a read-only transaction (use a read-only login) and snapshots need `ALLOW_SNAPSHOT_ISOLATION`; time zones with daylight saving are not supported in rules (fixed offsets only); 1:N and N:1 relations need datasets normalized by queries for a complete comparison.
 
+### AI assistant: Claude Code and Codex (plugin)
+
+A **chat inside the IDE** with your own Claude Code or Codex, like the official VS Code extensions, but with the context of everything open in Rits.
+
+- Uses the **official CLI and your account** (subscription or API key). Rits has no server of its own: nothing goes through it.
+- The agent sees the IDE through a **local MCP server** (`127.0.0.1`, one token per chat): project, active file, selection and unsaved changes, LSP problems, Git, **connected databases** (structure and queries in a read-only transaction), **Airflow DAGs, runs and logs**, **dbt** results, **notebook** cells, **Docker** containers and **Migration Audit** runs. Passwords and tokens are never handed over.
+- Streaming answers, a card for each tool used, code blocks with **Copy** and **Insert at cursor**, active file and selection attached with one click.
+- Permissions: read-only, **edit with approval** (each Claude Code edit or command shows up in the chat with the diff and Allow/Deny buttons) or edit automatically. Each project's chat resumes where it stopped.
+
+Full guide (Portuguese): [docs/assistente-ia.md](docs/assistente-ia.md).
+
 ### Infrastructure
 
 - **Docker**: container manager (optional plugin), with containers grouped by Compose project, start/stop/restart, logs, shell into the container, live CPU and memory, images and volumes.

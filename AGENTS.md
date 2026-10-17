@@ -102,6 +102,7 @@ cd src-tauri && cargo test -- --ignored --test-threads=1
 | `tests/audit_db.rs` | Migration Audit ponta a ponta em PostgreSQL, MySQL, MariaDB, SQL Server e Firebird (`--ignored`; containers e portas no cabeçalho do arquivo): baseline, reconciliação, relacionamentos, erro de permissão, cancelamento, origem alterada, estimativas, mapa de IDs |
 | `tests/jupyter_client.rs` | protocolo de mensagens, autenticação por token contra servidor falso, caminhos, compose do ambiente local; `jupyter_live` (`--ignored`) roda contra um JupyterLab real (instruções no cabeçalho) |
 | `tests/dbt_plugin.rs` | argumentos estruturados, seleção, Docker sem segredos na linha de comando, perfis sem senha, versão, artefatos; `dbt_live` (`--ignored`) roda dbt Core real contra PostgreSQL (`RITS_DBT`, `RITS_DBT_PG_PORT`) |
+| `tests/assistant_mcp.rs` | servidor MCP do Assistente IA: token, Host, initialize, tools/list, tools/call encaminhado à janela, lote e notificações; com `--ignored`, o Claude Code real (`claude` no PATH, logado) chama uma ferramenta da IDE |
 | `tests/ide_backend.rs` | framing JSON-RPC com escritas picotadas, UTF-8 dividido entre leituras, operações de arquivo (CRLF, BOM, binário, .gitignore, busca), e handshake real com gopls, basedpyright, debugpy e Delve via TCP |
 
 > No MySQL de teste, sempre use `--default-character-set=utf8mb4` ao popular dados pelo `docker exec`. Sem isso o texto acentuado fica com dupla codificação e parece um bug do app, mas não é.
@@ -180,6 +181,7 @@ src/
     jupyter/               plugin Jupyter (5.10): api.ts, panel.ts (servidores, ambiente Docker), notebook.ts, render.ts
     dbt/                   plugin dbt (5.11): api.ts, panel.ts, run.ts (aba de execução), editor.ts (Jinja, ref/source, modelos)
     audit/                 plugin Migration Audit (5.12): api.ts, panel.ts, projectTab.ts (assistente, mapeamento, relatórios)
+    assistant/             plugin Assistente IA (5.13): panel.ts (chat), providers.ts (Claude Code e Codex), tools.ts (ferramentas MCP)
   assets/icons/            SVGs do expui (Apache 2.0) com variantes _dark e @20x20
 src-tauri/
   tauri.conf.json          productName "Rits", identifier "dev.rits.ide", janela sem moldura
@@ -193,6 +195,7 @@ src-tauri/
   src/secrets.rs           cofre do sistema compartilhado pelos plugins (keyring), segredos aleatórios, uuid4
   src/jupyter/             plugin Jupyter: client.rs (REST /api, token), proto.rs (mensagens 5.3), mod.rs (comandos, WebSocket, ambiente Docker)
   src/dbt/                 plugin dbt: mod.rs (argumentos, perfis, execução com lock), artifacts.rs (manifest/run_results)
+  src/assistant.rs         Assistente IA: servidor MCP local (HTTP em 127.0.0.1, token por conversa) e consulta somente leitura
   src/audit/               Migration Audit: canon, engine, evidence, adapter, analysis, runner, store, report, model, mod (comandos)
   src/db/ext.rs            drivers sob demanda: venv privado, pip install no primeiro uso, ExtConn (JSON por linha via stdio)
   src/db/drivers/rits_driver.py  o "driver host" Python (SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB)
@@ -294,7 +297,7 @@ O backup e o restore montam argumentos em `tools.rs` (`pg_plan`/`my_plan`, que s
 Na pasta de configuração (`%APPDATA%\dev.rits.ide\` no Windows, `~/Library/Application Support/dev.rits.ide/` no macOS) ficam:
 - `connections.json`: conexões de banco (**senhas em texto puro**; melhoria pendente: migrá-las para o cofre do sistema de `airflow/secrets.rs`, já usado pelo Airflow);
 - `airflow-instances.json` e `airflow-envs.json`: instâncias e ambientes locais do Airflow (**sem** senhas nem tokens, que ficam no cofre do sistema); `airflow-envs/<slug>/compose.yaml`: o compose de cada ambiente local (fora do projeto e do Git);
-- `jupyter-servers.json`, `jupyter-envs.json`, `jupyter-envs/<slug>/compose.yaml` e `jupyter-trust.json` (Jupyter, sem tokens); `dbt-profiles.json` e `dbt-profiles/<id>/profiles.yml` (dbt, sem senhas); `migration-audit/` (projetos, baselines, execuções e exportações do Migration Audit — podem conter dados auditados);
+- `jupyter-servers.json`, `jupyter-envs.json`, `jupyter-envs/<slug>/compose.yaml` e `jupyter-trust.json` (Jupyter, sem tokens); `dbt-profiles.json` e `dbt-profiles/<id>/profiles.yml` (dbt, sem senhas); `migration-audit/` (projetos, baselines, execuções e exportações do Migration Audit — podem conter dados auditados); `assistant-chat-<projeto>.json` (conversas do Assistente IA);
 - `history.json`: histórico SQL; `recentProjects.json`: projetos recentes; `project-<…>.json`: `ProjectSettings` de cada projeto (layout, arquivos abertos, breakpoints, configurações de execução, interpretador, pastas expandidas, consoles).
 
 Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no `localStorage`; sempre envolva o acesso em `try/catch`. Quando o app se chamava "Beaver Grip", o identificador era `dev.beavergrip.app`; `store::migrate_legacy` copia esses arquivos uma única vez.
@@ -343,6 +346,16 @@ Plugin opcional (`plugin.audit`) de auditoria determinística de conversões. **
 - **Orquestração** (`runner.rs`): `capture_side` (snapshot do coordenador; no PostgreSQL os workers importam o `pg_export_snapshot`), `reconcile` (usa a configuração congelada da baseline para a origem; campos cujas regras mudaram ficam bloqueados), `volume_result` (estimativas e cardinalidades não 1:1 nunca aprovam). Progresso pelo evento `audit-progress`; cancelamento por `JobCtl` (cancela também a consulta no banco).
 - **Relatórios** (`report.rs`): HTML autocontido (escape completo, sem scripts nem recursos remotos), CSV com proteção contra fórmulas, máscara de valores sensíveis por padrão (detalhado só por ação explícita).
 - Para um banco novo: variante em `dialect_of`, descoberta e streaming no adapter (ou no driver Python), linha na matriz `capabilities()` e um caso em `tests/audit_db.rs`.
+
+### 5.13 Plugin Assistente IA (Claude Code e Codex)
+Plugin opcional (`plugin.assistant`, `LAZY_PLUGINS`). Um chat na tool window `assistant` (direita) que conversa com o **CLI oficial do usuário**: o Rits não chama APIs de modelos nem guarda chaves.
+
+- **Agentes** (`providers.ts`): `locate()` acha `claude`/`codex` no PATH e em `~/.local/bin`, `~/.claude/local`, `%APPDATA%\npm`; sem Codex global, usa `npx -y @openai/codex@latest`.
+  - **Claude Code**: um processo por conversa, `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <arquivo> --append-system-prompt … --allowedTools=<ferramentas do Rits>`. Cada mensagem é uma linha JSON no stdin; o `session_id` do `system/init` é salvo e usado no `--resume` depois de reabrir. Modos: `plan` (somente leitura), `--permission-prompt-tool mcp__rits__approve` (aprovação no chat) e `acceptEdits`. **`--allowedTools` é variádico**: passe um único valor com `=` e vírgulas, senão ele engole os argumentos seguintes.
+  - **Codex**: um `codex exec --json` por mensagem e `codex exec resume <thread> -` depois. O prompt vai pelo **stdin** (`-`), nunca pela linha de comando; os `-c` usam valores **sem aspas** (o TOML cai no texto literal). Isso evita problemas de aspas e quebras de linha nos launchers `.cmd` do Windows. `exec resume` não aceita `-s`: o sandbox vai em `-c sandbox_mode=…`. O token do MCP vai pela variável `RITS_MCP_TOKEN` (`bearer_token_env_var`). Os modelos vêm de `codex debug models` (`visibility: list`).
+- **Servidor MCP** (`assistant.rs`): HTTP mínimo em `127.0.0.1:<porta livre>`, rota `/mcp`, respostas JSON (sem SSE). Exige o bearer de uma conversa registrada (`assistant_open`) e `Host` local (proteção contra DNS rebinding). `tools/call` vira o evento `assistant-tool-call` **só para a janela dona** da conversa e espera `assistant_tool_result` (180 s; 30 min para `approve`). Tokens morrem no `assistant_close`, no `window_reset`/fechamento da janela (`drop_owner`) e no `assistant_release`. O arquivo do `--mcp-config` fica em `<cache>/assistant/` com permissão 0600 e é apagado ao fechar.
+- **Ferramentas** (`tools.ts`): todas com `readOnlyHint` (o Codex só chama ferramentas MCP sem aprovação quando elas se declaram somente leitura). Reaproveitam as APIs da IDE: editores (inclusive texto não salvo), `lsp.diagnostics`, `store.connections` (sem senhas), `api.completion/columns/indexes`, `AirflowApi`, `dbt.artifacts`, notebooks abertos do plugin Jupyter, `docker ps` e `audit.projects/history`. Consultas do agente passam por `assistant_db_query` → `export::stream_query` (transação somente leitura, até 2000 linhas, 60 s). Saídas cortadas em 60 mil caracteres. **Nunca** exponha senhas, tokens ou comandos que escrevam por aqui; ferramenta nova = entrada em `TOOLS` + caso em `runTool()` + linha na tabela de `docs/assistente-ia.md`.
+- **Chat** (`panel.ts`): streaming (`stream_event` → `delta`), cartões por ferramenta, Markdown pelo `renderMarkdown` do Jupyter (sanitizado), aprovação com diff para `Edit`/`Write`, "Sempre permitir nesta conversa". Conversa por projeto no documento `assistant-chat-<projeto>` (últimas 200 mensagens + sessões por agente); preferências no `localStorage` `assistant.*`.
 
 ---
 

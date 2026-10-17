@@ -237,6 +237,19 @@ async function pluginsPage(wb: Workbench, el: HTMLElement, focus?: string) {
   const cards: HTMLElement[] = [];
   for (const p of PLUGINS) cards.push(await pluginCard(wb, p, el, focus === p.id));
   el.append(...cards);
+  el.append(
+    h("h3", { style: "margin-top:8px" }, "Inteligência artificial"),
+    optionalCard(wb, el, focus, {
+      id: "assistant",
+      key: "plugin.assistant",
+      icon: "ai",
+      name: "Assistente IA (Claude Code e Codex)",
+      desc: "Um chat dentro da IDE com o seu Claude Code ou o seu Codex, como as extensões oficiais do VS Code. O agente enxerga o que a IDE enxerga: projeto, arquivos abertos e seleção, problemas, bancos conectados (consultas somente leitura), DAGs e logs do Airflow, dbt, notebooks, Docker e auditorias. Edições e comandos do Claude Code pedem aprovação no próprio chat.",
+      hint: "Usa o CLI oficial e a sua conta (assinatura ou chave): nada passa por servidores do Rits. O contexto vai por um servidor MCP local (127.0.0.1, com token por conversa).",
+      opened: "A janela Assistente IA apareceu na faixa da direita.",
+      window: "assistant",
+    }),
+  );
   el.append(h("h3", { style: "margin-top:8px" }, "Infraestrutura"), await dockerCard(wb, el, focus === "docker"), airflowCard(wb, el, focus === "airflow"));
   el.append(
     h("h3", { style: "margin-top:8px" }, "Dados"),
@@ -296,7 +309,7 @@ interface OptionalPlugin {
   window: string;
 }
 
-/** Card of an optional plugin loaded on demand (Jupyter, dbt, Migration Audit). */
+/** Card of an optional plugin loaded on demand (Jupyter, dbt, Migration Audit, AI assistant). */
 function optionalCard(wb: Workbench, el: HTMLElement, focus: string | undefined, p: OptionalPlugin): HTMLElement {
   const on = pluginEnabled(p.key);
   const toggle = h("button.btn", { class: on ? "" : "primary" }, icon(on ? "general/delete" : "actions/install"), on ? "Desinstalar" : "Instalar plugin") as HTMLButtonElement;

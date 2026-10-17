@@ -1,4 +1,4 @@
-// Optional plugins loaded on demand (Jupyter, dbt, Migration Audit; Airflow keeps its own entry).
+// Optional plugins loaded on demand (Jupyter, dbt, Migration Audit, AI assistant; Airflow keeps its own entry).
 // Each plugin has a tiny entry module (enabled flag + loader); everything else is imported only
 // when the plugin is enabled, so Vite puts it in a separate chunk and the IDE stays light.
 import type { Extension } from "@codemirror/state";
@@ -39,6 +39,7 @@ export const LAZY_PLUGINS: LazyPlugin[] = [
   { id: "jupyter", key: "plugin.jupyter", load: async (wb) => new (await import("./jupyter/panel")).JupyterTools(wb) },
   { id: "dbt", key: "plugin.dbt", load: async (wb) => new (await import("./dbt/panel")).DbtTools(wb) },
   { id: "audit", key: "plugin.audit", load: async (wb) => new (await import("./audit/panel")).AuditTools(wb) },
+  { id: "assistant", key: "plugin.assistant", load: async (wb) => new (await import("./assistant/panel")).AssistantTools(wb) },
 ];
 
 // ---------------- editor extension points ----------------

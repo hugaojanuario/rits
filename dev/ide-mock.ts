@@ -77,7 +77,10 @@ const handlers: Record<string, (a: any) => unknown> = {
   fs_watch: () => null,
   fs_unwatch: () => null,
   fs_files: () => [],
-  which: () => null,
+  which: (a) => (a.name === "claude" && params.has("ai") ? HOME + "/.local/bin/claude" : null),
+  assistant_open: () => ({ port: 1, token: "t", url: "http://127.0.0.1:1/mcp", claudeConfig: "" }),
+  assistant_close: () => null,
+  assistant_release: () => null,
   list_connections: () => [],
   run_capture: (a) => {
     const args: string[] = a.args ?? [];

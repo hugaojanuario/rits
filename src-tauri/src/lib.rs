@@ -1,4 +1,5 @@
 pub mod airflow;
+pub mod assistant;
 pub mod audit;
 pub mod jupyter;
 pub mod dbt;
@@ -314,6 +315,7 @@ pub fn run() {
         .manage(dbt::DbtState::default())
         .manage(audit::AuditState::default())
         .manage(export::ExportState::default())
+        .manage(assistant::AssistantState::default())
         .invoke_handler(tauri::generate_handler![
             list_connections,
             save_connection,
@@ -409,6 +411,11 @@ pub fn run() {
             dbt::dbt_project_profile,
             dbt::dbt_artifacts,
             dbt::dbt_compiled,
+            assistant::assistant_open,
+            assistant::assistant_close,
+            assistant::assistant_tool_result,
+            assistant::assistant_release,
+            assistant::assistant_db_query,
             updater::update_check,
             updater::update_install,
             updater::app_version,
@@ -445,6 +452,7 @@ pub fn run() {
                 procs::pty_close_owner(&app.state::<procs::Terms>(), label);
                 tauri::async_runtime::block_on(app.state::<jupyter::JupyterState>().close_owner(label));
                 tauri::async_runtime::block_on(app.state::<audit::AuditState>().cancel_owner(label));
+                tauri::async_runtime::block_on(app.state::<assistant::AssistantState>().drop_owner(label));
             }
             if let tauri::RunEvent::Exit = event {
                 // Do not leave language servers, debuggers or programs running.

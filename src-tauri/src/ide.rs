@@ -227,10 +227,11 @@ pub fn pty_close(t: State<'_, Terms>, id: String) {
 
 /// Called when a page (re)loads: stops servers, programs and terminals left by its previous instance.
 #[tauri::command]
-pub async fn window_reset(window: tauri::Window, p: State<'_, Procs>, t: State<'_, Terms>, jp: State<'_, crate::jupyter::JupyterState>, au: State<'_, crate::audit::AuditState>) -> Result<(), String> {
+pub async fn window_reset(window: tauri::Window, p: State<'_, Procs>, t: State<'_, Terms>, jp: State<'_, crate::jupyter::JupyterState>, au: State<'_, crate::audit::AuditState>, ai: State<'_, crate::assistant::AssistantState>) -> Result<(), String> {
     p.kill_owner(window.label()).await;
     jp.close_owner(window.label()).await;
     au.cancel_owner(window.label()).await;
+    ai.drop_owner(window.label()).await;
     procs::pty_close_owner(&t, window.label());
     Ok(())
 }

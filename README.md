@@ -121,6 +121,17 @@ Auditoria de **conversões de dados** entre um banco de origem e um de destino, 
 
 Bancos: PostgreSQL, MySQL, MariaDB, SQL Server e Firebird — todos validados com testes de integração reais (PostgreSQL 17, MySQL 8.4, MariaDB 11.8, SQL Server 2022, Firebird 5). Limitações: MongoDB fica fora desta versão; no SQL Server as consultas personalizadas não rodam em transação somente leitura (use um login somente leitura) e o snapshot exige `ALLOW_SNAPSHOT_ISOLATION`; fusos com horário de verão não são suportados nas regras (só deslocamentos fixos); relações 1:N e N:1 exigem conjuntos normalizados por consulta para comparação completa.
 
+### Assistente IA: Claude Code e Codex (plugin)
+
+Um **chat dentro da IDE** com o seu Claude Code ou o seu Codex, como as extensões oficiais do VS Code, mas com o contexto de tudo o que está aberto no Rits.
+
+- Usa o **CLI oficial e a sua conta** (assinatura ou chave da API). O Rits não tem servidor próprio: nada passa por ele.
+- O agente enxerga a IDE por um **servidor MCP local** (`127.0.0.1`, token por conversa): projeto, arquivo ativo, seleção e alterações não salvas, problemas do LSP, Git, **bancos conectados** (estrutura e consultas em transação somente leitura), **DAGs, execuções e logs do Airflow**, resultados do **dbt**, células dos **notebooks**, containers do **Docker** e auditorias do **Migration Audit**. Senhas e tokens nunca são entregues.
+- Respostas em streaming, cartões com cada ferramenta usada, blocos de código com **Copiar** e **Inserir no cursor**, arquivo ativo e seleção anexados com um clique.
+- Permissões: somente leitura, **editar com aprovação** (cada edição ou comando do Claude Code aparece no chat com o diff e os botões Permitir/Negar) ou editar automaticamente. A conversa de cada projeto continua de onde parou.
+
+Guia completo: [docs/assistente-ia.md](docs/assistente-ia.md).
+
 ### Infraestrutura
 
 - **Docker**: gerenciador de containers (plugin opcional), com containers agrupados por projeto do Compose, iniciar/parar/reiniciar, logs, shell no container, CPU e memória ao vivo, imagens e volumes.

@@ -1399,6 +1399,60 @@ body.tw-dragging, body.tw-dragging * { cursor: grabbing !important; user-select:
 .glass .ma-card, .glass .ma-unit-ed, .glass .ma-unit { border-radius: 14px; }
 .glass .nb-kernel, .glass .dbt-chip { border-radius: 999px; }
 
+/* ---- Assistente IA (plugin) ---- */
+.tw-body.ai { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.ai-head { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--card-border); }
+.ai-opts { display: flex; gap: 6px; }
+.ai-seg { display: flex; align-self: flex-start; background: var(--frame); border: 1px solid var(--card-border); border-radius: 7px; padding: 2px; }
+.ai-seg button { border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 5px; cursor: pointer; }
+.ai-seg button.active { background: var(--accent); color: var(--on-accent); }
+.ai-sel { height: 24px; font-size: 12px; min-width: 0; flex: 1 1 0; }
+.ai-status:empty { display: none; }
+.ai-status { padding: 6px 8px 0; }
+.ai-cli { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.ai-cli .dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-list { flex: 1; overflow-y: auto; padding: 10px 10px 4px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.ai-msg { font-size: 13px; line-height: 1.5; word-wrap: break-word; user-select: text; }
+.ai-msg.user { align-self: flex-end; max-width: 88%; background: var(--sel); border-radius: 10px 10px 2px 10px; padding: 6px 10px; white-space: pre-wrap; }
+.ai-msg.assistant { padding: 0 2px; }
+.ai-msg.assistant.streaming { white-space: pre-wrap; }
+.ai-msg.assistant p { margin: 0 0 6px; }
+.ai-msg.info, .ai-msg.error { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--fg-dim); }
+.ai-msg.error { color: var(--danger); background: var(--danger-soft); border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; }
+.ai-code { position: relative; }
+.ai-code-acts { position: absolute; top: 4px; right: 4px; display: none; gap: 2px; background: var(--island); border-radius: 6px; }
+.ai-code:hover .ai-code-acts { display: flex; }
+.ai-tool { font-size: 12px; border: 1px solid var(--card-border); border-radius: 8px; padding: 4px 8px; background: var(--frame); }
+.ai-tool summary { cursor: pointer; display: flex; align-items: center; gap: 6px; list-style: none; }
+.ai-tool summary::-webkit-details-marker { display: none; }
+.ai-brief { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-family: var(--mono, monospace); font-size: 11px; }
+.ai-pre { margin: 6px 0 2px; max-height: 220px; overflow: auto; font-size: 11.5px; white-space: pre-wrap; background: var(--island); border-radius: 6px; padding: 6px 8px; user-select: text; }
+.ai-pre.out { color: var(--fg-dim); }
+.ai-approve { border: 1px solid var(--accent); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; background: var(--island); }
+.ai-approve code { margin-left: 6px; font-size: 11.5px; }
+.ai-approve.answered { border-color: var(--card-border); opacity: .8; }
+.ai-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.ai-diff pre { margin: 0; padding: 4px 8px; font-size: 11.5px; white-space: pre-wrap; max-height: 160px; overflow: auto; }
+.ai-diff .del { background: var(--danger-soft); }
+.ai-diff .add { background: var(--ok-soft, var(--sel)); }
+.ai-empty { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 16px 8px; font-size: 12.5px; }
+.ai-empty svg { width: 30px; height: 30px; }
+.ai-sugs { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: 6px; }
+.ai-sug { text-align: left; border: 1px solid var(--card-border); background: var(--frame); color: var(--fg); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.ai-sug:hover { border-color: var(--accent); }
+.ai-composer { padding: 6px 8px 8px; border-top: 1px solid var(--card-border); display: flex; flex-direction: column; gap: 6px; }
+.ai-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.ai-chip { display: inline-flex; align-items: center; gap: 3px; font: inherit; font-size: 11px; border: 1px solid var(--card-border); background: none; color: var(--fg-dim); border-radius: 10px; padding: 1px 7px 1px 4px; cursor: pointer; max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ai-chip.on { color: var(--fg); border-color: var(--accent); }
+.ai-chip svg { width: 12px; height: 12px; }
+.ai-hint { font-size: 10.5px; color: var(--fg-dim); }
+.ai-inputrow { display: flex; gap: 6px; align-items: flex-end; }
+.ai-input { flex: 1; resize: none; min-height: 52px; max-height: 200px; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--card-border); background: var(--island); color: var(--fg); outline: none; }
+.ai-input:focus { border-color: var(--accent); }
+.ai-send { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+.ai-send svg { filter: var(--on-accent-icon); }
+.ai.busy .ai-list::after { content: "trabalhando…"; font-size: 11.5px; color: var(--fg-dim); padding: 2px; }
+
 /* =====================================================================================
    Liquid Glass (macOS only; <html class="mac glass">)
    The window is transparent over the native glass material (tauri.macos.conf.json), so
