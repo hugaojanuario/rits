@@ -6,7 +6,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { h, uid } from "../../util";
 import { icon } from "../../icons";
 import { button, confirmDialog, toast } from "../../ui";
-import { host, P } from "../host";
+import { host, IS_WIN, P } from "../host";
 import type { PluginHandle } from "../plugins";
 import type { Workbench } from "../workbench";
 import { APPROVE_TOOL, runTool, TOOLS } from "./tools";
@@ -41,6 +41,13 @@ const setPref = (k: string, v: string) => {
 };
 
 const CLAUDE_MODELS: [string, string][] = [["", "padrão da conta"], ["sonnet", "Sonnet"], ["opus", "Opus"], ["haiku", "Haiku"]];
+/** A command line for the integrated terminal (PowerShell on Windows needs "&" to run a quoted path). */
+function termCommand(program: string, args: string[]) {
+  const q = (x: string) => (/^[\w./:@=-]+$/.test(x) ? x : IS_WIN ? `'${x.replace(/'/g, "''")}'` : `'${x.replace(/'/g, "'\\''")}'`);
+  const line = [program, ...args].map(q).join(" ");
+  return IS_WIN ? `& ${line}` : line;
+}
+
 const PROVIDER_LABEL: Record<ProviderId, string> = { claude: "Claude Code", codex: "Codex" };
 
 const TOOL_LABEL: Record<string, string> = Object.fromEntries([...TOOLS.map((t) => [`mcp__rits__${t.name}`, t.title]), ["Read", "Ler arquivo"], ["Write", "Criar arquivo"], ["Edit", "Editar arquivo"], ["MultiEdit", "Editar arquivo"], ["Bash", "Comando"], ["Glob", "Buscar arquivos"], ["Grep", "Buscar texto"], ["WebFetch", "Web"], ["WebSearch", "Busca na web"], ["TodoWrite", "Tarefas"], ["Task", "Subagente"]]);
@@ -191,7 +198,8 @@ export class AssistantTools implements PluginHandle {
         null,
         h("span.dim", null, `${PROVIDER_LABEL[p]}: ${cli.via}`),
         h("span.grow"),
-        h("button.link", { onclick: () => this.wb.terminals.newTab(this.wb.root, p === "claude" ? `"${cli.program}"` : [cli.program, ...cli.prefix, "login"].map((x) => (x.includes(" ") ? `"${x}"` : x)).join(" ")) }, "Fazer login…"),
+        // Claude Code logs in from its interactive session (/login); Codex has "codex login"
+        h("button.link", { onclick: () => this.wb.terminals.newTab(this.wb.root, termCommand(cli.program, p === "claude" ? [] : [...cli.prefix, "login"])) }, "Fazer login…"),
       ),
     );
     if (p === "codex" && this.codexModels.length === 1) {

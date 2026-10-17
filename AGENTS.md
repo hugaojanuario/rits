@@ -6,13 +6,14 @@ Este arquivo explica **o que é o projeto, como ele está organizado, como rodar
 
 ## 1. O que é o Rits
 
-Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados**, infraestrutura (Docker, Terraform, Kubernetes) e orquestração (Apache Airflow, como plugin). Roda no Windows 11 e no macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
+Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados**, infraestrutura (Docker, Terraform, Kubernetes), orquestração e transformação (Apache Airflow, dbt e Jupyter, como plugins), auditoria de migrações (Migration Audit) e um assistente de IA (Claude Code ou Codex do próprio usuário, com o contexto da IDE). Roda no Windows 11 e no macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
 
 - **Visual**: layout próprio **Blocos** (temas Rits Escuro/Claro): barra de título com o logo (menu principal), as abas do editor, o widget de execução e botões de layout; tool windows em **cartões** arredondados (esquerdo, direito e inferior) com um seletor segmentado; uma aba fixa "Início" com a tela de início do projeto e a barra de comando; barra de status discreta. O acento é o lilás do logo (`#A08CFF`; `#6B55E0` no tema claro).
 - **Código**: editor CodeMirror 6 com servidores de linguagem (LSP), execução, testes, depuração (DAP), terminal real (PTY), Git e navegação no estilo IntelliJ.
 - **Banco de dados**: explorador de conexões, console SQL, editor de dados, DDL, diagrama ER, exportação e backup/restore com as ferramentas nativas (`pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`), no estilo do DBeaver. PostgreSQL e MySQL/MariaDB têm driver embutido; SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse e MongoDB baixam o driver na primeira conexão (seção 5.7).
 - **Leve**: Tauri 2 com o WebView do sistema (WebView2 no Windows, WKWebView no macOS), sem Chromium embutido. O instalador NSIS tem cerca de 3,5 MB, o exe cerca de 7 MB, o `Rits.app` cerca de 7,6 MB, e o processo principal usa cerca de 30 MB de RAM.
-- **Plugins opcionais**: Docker, Apache Airflow, Jupyter, dbt e Migration Audit são ativados em Configurações › Plugins. Desativados, não carregam código nem fazem requisições (Airflow, Jupyter, dbt e Migration Audit ficam em chunks carregados por `import()`).
+- **Plugins opcionais**: Docker, Apache Airflow, Jupyter, dbt, Migration Audit e Assistente IA são ativados em Configurações › Plugins. Desativados, não carregam código nem fazem requisições (Airflow, Jupyter, dbt, Migration Audit e Assistente IA ficam em chunks carregados por `import()`). Cada um tem um guia em `docs/`, aberto pelo botão "?" da janela.
+- **Atualizações**: botão na barra de título quando há versão nova; download do GitHub conferido por SHA-256 e instalação pelo próprio app (seção 5.14).
 
 A interface é **inteiramente em português (pt-BR)**. Mantenha todos os textos visíveis ao usuário em pt-BR, e comentários de código e identificadores em inglês, como no resto do código.
 
@@ -67,12 +68,15 @@ O que é específico do macOS:
 - **Frontend**: `IS_WIN`/`IS_MAC`/`EXE`/`INSTALL`/`REVEAL_LABEL` em `host.ts`. `P.win()` só converte para `\` no Windows (no resto devolve o caminho igual), então continue usando-o para caminhos passados a processos. Use `P.isAbs()` em vez de testar `C:/`. O venv usa `bin/python` (e `scriptsDir()` é a própria pasta `bin`).
 - **Atalhos**: os atalhos globais aceitam Ctrl **ou** Cmd, e o keymap do editor usa `Mod-` (Cmd no macOS). Os rótulos dos menus ainda mostram "Ctrl".
 - **Liquid Glass**: a janela é transparente (`transparent`, `macOSPrivateApi` e a feature `macos-private-api` do `tauri`, só no alvo macOS no `Cargo.toml`) e usa `windowEffects` `liquidGlassRegular` (macOS 26), com fallback para `underWindowBackground`. Com a classe `glass` no `<html>` (padrão no Mac; interruptor em Configurações › Aparência; `localStorage` `glass`), a seção "Liquid Glass" no fim do `styles.css` redefine os tokens com cores translúcidas: superfícies de "frame" transparentes, cartões com `--rim`/`--sheen` e popups com `backdrop-filter`. Rótulos e separadores seguem as cores de sistema da Apple; o acento é o mesmo lilás dos temas opacos, e o texto sobre ele usa `--on-accent`. O `setTheme()` do `main.ts` também chama `getCurrentWindow().setTheme()` para o vidro nativo acompanhar o tema (permissão `core:window:allow-set-theme`). Componente novo: use os tokens e confira com o vidro ligado e desligado.
+- **Instalação e quarentena**: o app tem assinatura ad-hoc, sem notarização. `scripts/install-macos.sh` (o `curl … | bash` do README) baixa o DMG da última release, copia o `Rits.app` para `/Applications` com `ditto` e roda `xattr -dr com.apple.quarantine`. Na IDE, `macos_quarantine_status` (`ide.rs`) detecta o atributo e a App Translocation, e `macos.ts` avisa com o comando pronto para copiar. As variáveis `RITS_APP` e `RITS_NO_OPEN` servem para testar o script sem mexer no app instalado.
 - **Banco**: `tools.rs` procura `pg_dump`/`mysqldump` em `/opt/homebrew/opt/{postgresql@*,libpq,mysql*,mariadb*}/bin`, no Postgres.app e em `/Library/PostgreSQL`.
 
 ### Releases no GitHub
 A versão deve coincidir em `package.json`, nas duas entradas do `package-lock.json`, em `src-tauri/Cargo.toml`, no pacote `rits` do `Cargo.lock` e no `tauri.conf.json`. Depois de commitar na `main`, crie e envie uma tag `v<versão>` (ex.: `git tag -a v0.3.0 -m "Rits 0.3.0"` e `git push origin main v0.3.0`).
 
 `.github/workflows/release.yml` valida a tag com `scripts/release.mjs validate`, exige que o commit pertença à `main`, roda o build TypeScript e os testes Rust e gera instaladores em runners nativos Windows x64 e macOS Apple Silicon. `scripts/release.mjs collect` copia os bundles para os nomes estáveis `Rits-windows-x64-setup.exe` e `Rits-macos-arm64.dmg`. Somente depois de ambos passarem, o job de publicação envia os arquivos e `SHA256SUMS.txt` para um rascunho e publica a release. O token recebe escrita apenas nesse job. Os READMEs usam os links `releases/latest/download/<nome>`.
+
+`.github/workflows/ci.yml` roda em todo push e pull request, no Windows e no macOS: `npm run build` (tsc + Vite), o smoke de comandos do PowerShell (Windows), `npm run tauri build -- --debug --no-bundle` e `cargo test`, com `RUSTFLAGS=-D warnings`. É a garantia de que o que foi feito num sistema compila e passa no outro: confira o CI antes de criar a tag.
 
 As notas ficam em `.github/release-notes.md`: atualize para cada versão. Para repetir uma execução que falhou, use Re-run jobs ou o `workflow_dispatch` com a mesma tag existente; uma release já publicada não é sobrescrita. O Mac continua com assinatura ad-hoc, sem notarização. Saídas locais de staging ficam em `release-assets/` (ignorado pelo Git).
 
@@ -102,6 +106,8 @@ cd src-tauri && cargo test -- --ignored --test-threads=1
 | `tests/audit_db.rs` | Migration Audit ponta a ponta em PostgreSQL, MySQL, MariaDB, SQL Server e Firebird (`--ignored`; containers e portas no cabeçalho do arquivo): baseline, reconciliação, relacionamentos, erro de permissão, cancelamento, origem alterada, estimativas, mapa de IDs |
 | `tests/jupyter_client.rs` | protocolo de mensagens, autenticação por token contra servidor falso, caminhos, compose do ambiente local; `jupyter_live` (`--ignored`) roda contra um JupyterLab real (instruções no cabeçalho) |
 | `tests/dbt_plugin.rs` | argumentos estruturados, seleção, Docker sem segredos na linha de comando, perfis sem senha, versão, artefatos; `dbt_live` (`--ignored`) roda dbt Core real contra PostgreSQL (`RITS_DBT`, `RITS_DBT_PG_PORT`) |
+| `tests/export_query.rs` | formatos do `Writer` (CSV, TSV, JSON, JSONL, XML, SQL, escapes e nulos); com `--ignored`, exportação completa de 120 mil linhas do Postgres e do MySQL de teste |
+| `tests/updater.rs` | comparação de versões, leitura da release e do `SHA256SUMS.txt`; com `--ignored`, a última release real do GitHub, download e conferência do instalador e, no macOS, a troca do bundle com a quarentena removida |
 | `tests/assistant_mcp.rs` | servidor MCP do Assistente IA: token, Host, initialize, tools/list, tools/call encaminhado à janela, lote e notificações; com `--ignored`, o Claude Code real (`claude` no PATH, logado) chama uma ferramenta da IDE |
 | `tests/ide_backend.rs` | framing JSON-RPC com escritas picotadas, UTF-8 dividido entre leituras, operações de arquivo (CRLF, BOM, binário, .gitignore, busca), e handshake real com gopls, basedpyright, debugpy e Delve via TCP |
 
@@ -148,7 +154,7 @@ src/
   tableView.ts             aba de tabela: dados paginados, filtros, DML, colunas, índices, DDL
   connDialog.ts            diálogo de conexão
   backup.ts                wizards de backup/restore e painel de tarefas
-  export.ts                exportação CSV/TSV/JSON/SQL/Markdown/HTML
+  export.ts                exportação CSV/TSV/Excel/JSON/JSONL/XML/SQL/Markdown/HTML (página visível ou resultado completo pelo backend)
   dialects.ts              comportamento por banco (aspas, paginação, EXPLAIN, schemas, arquivo, presets compatíveis)
   diagram.ts               aba de diagrama ER (canvas, layout automático, minimapa, exportar SVG/Mermaid)
   # ---- IDE de código ----
@@ -173,6 +179,9 @@ src/
     dbtools.ts             integra o Database Tools na IDE (tool windows Database e Services)
     docker.ts              plugin opcional Docker: tool window Docker (containers, imagens, volumes) via CLI docker
     keymap.ts              keymaps JetBrains e VS Code: displayShortcut(), tabelas do Keymap
+    update.ts              verificação de nova versão, botão "Atualizar" na barra de título e diálogo de instalação
+    macos.ts               aviso de quarentena/App Translocation no macOS, com o comando para liberar o app
+    docs.ts                botão "?" das janelas de plugin e abertura dos guias de docs/ numa aba
     completion.ts          autocomplete (LSP com resolve/auto-import, relevância, ícones por tipo; palavras do arquivo sem LSP)
     infra.ts               Dockerfile, Compose, Terraform e Kubernetes: detecção, ações (CLIs no Terminal) e modelos
     airflow/               plugin opcional Apache Airflow (seção 5.9): plugin.ts (entrada leve), api.ts, panel.ts,
@@ -200,6 +209,8 @@ src-tauri/
   src/db/ext.rs            drivers sob demanda: venv privado, pip install no primeiro uso, ExtConn (JSON por linha via stdio)
   src/db/drivers/rits_driver.py  o "driver host" Python (SQL Server, Oracle, Firebird, SQLite, DuckDB, ClickHouse, MongoDB)
   src/tools.rs             backup/restore: monta argumentos, localiza binários, transmite o log
+  src/export.rs            exportação do resultado completo em streaming (CSV, TSV, JSON, JSONL, XML, SQL) e gravação de arquivos binários
+  src/updater.rs           releases do GitHub: versão nova, download, conferência com SHA256SUMS.txt e instalação (NSIS ou DMG)
   src/ide.rs               comandos Tauri da IDE (arquivos, processos, PTY, which, env…)
   src/fsx.rs               sistema de arquivos: listagem com .gitignore, leitura/escrita, busca, watcher
   src/procs.rs             processos (texto ou JSON-RPC), TCP para DAP, PTY, capture, which, PATH aumentado
@@ -210,6 +221,9 @@ assets/logo-mark.svg       só a marca, sem fundo: um "R" sólido e inclinado, l
                            e apague as pastas android/ e ios/ que o comando cria (o app é só desktop);
                            a versão de 20 px usada na interface é o "logo" em src/icons.ts
 README.md / README.en.md   documentação para o usuário em pt-BR (principal) e em inglês: mantenha as duas em sincronia
+scripts/release.mjs        valida versões e coleta os instaladores (release)
+scripts/install-macos.sh   instalação em uma linha no macOS (baixa o DMG, copia para /Applications e tira a quarentena)
+.github/workflows/         ci.yml (tipos, build e testes no Windows e no macOS a cada push) e release.yml (seção 3)
 docs/                      guias de uso dos plugins (pt-BR), um .md por plugin; abertos na IDE pelo botão "?" (src/ide/docs.ts)
 dev/                       mocks de navegador: banco (mock.html) e janela da IDE (ide-mock.html)
 ```
@@ -286,6 +300,8 @@ Código de antes da IDE, reaproveitado. O `DbTools` cria o `Explorer` dentro da 
 
 O backup e o restore montam argumentos em `tools.rs` (`pg_plan`/`my_plan`, que são funções puras e testadas) e procuram os binários na pasta configurada na conexão, no PATH, em `C:\Program Files\PostgreSQL\*\bin` e em `MySQL`/`MariaDB`. A senha vai por `PGPASSWORD`/`MYSQL_PWD`, nunca pela linha de comando.
 
+**Exportação** (`export.ts` + `export.rs`): o botão "Exportar ▾" do console e da aba de tabela exporta a página visível (montada no frontend; o XLSX é um zip "stored" com CRC32 gerado em TS e gravado por `write_base64_file`) ou o **resultado completo**: `export_query` reexecuta o SQL em transação somente leitura (`stream_query`: `simple_query_raw` no Postgres, `query_iter` no MySQL, `stream` do driver Python) e grava em streaming num arquivo temporário renomeado no fim, com o evento `export-progress` e `export_cancel`. O Excel completo não passa pelo backend (limite de linhas da página). `stream_query` também atende as consultas do Assistente IA.
+
 **Drivers sob demanda** (`db/ext.rs`): os bancos não nativos viram `Session::Ext`. No `test_connection` e no `save_connection`, `ensure_driver(kind)` cria (uma vez) o venv em `<config>/drivers/venv` com um Python 3.9+ do sistema e roda `pip install` dos pacotes de `packages()` (puro Python quando possível: `python-tds`, `oracledb` thin, `firebirdsql`, `pymongo`). O marcador `<kind>.installed` evita baixar de novo. O progresso do pip vai para o evento `driver-progress`, mostrado no diálogo de conexão. Cada sessão é um processo `rits_driver.py`, e cancelar uma query mata esse processo (`Canceller::Ext`). Para um banco novo: variante em `DbKind`, pacotes em `packages()`, uma classe no `rits_driver.py` (registrada em `DRIVERS`) e uma entrada em `DIALECTS` (`dialects.ts`).
 
 **Dialetos** (`dialects.ts`): no frontend, todo `if postgres/mysql` deve passar por `dialect(kind)`: `quote`, `page` (LIMIT/OFFSET, OFFSET…FETCH), `explain`, `begin`, `schemas` (banco > schema > objetos ou banco > objetos), `file` (SQLite/DuckDB), `sql` (o MongoDB usa comandos estilo mongosh, e a aba de coleção é somente leitura) e `backup`. `PRESETS` oferece servidores compatíveis (CockroachDB, Supabase/Neon, TiDB, Redshift…).
@@ -301,7 +317,7 @@ Na pasta de configuração (`%APPDATA%\dev.rits.ide\` no Windows, `~/Library/App
 - `jupyter-servers.json`, `jupyter-envs.json`, `jupyter-envs/<slug>/compose.yaml` e `jupyter-trust.json` (Jupyter, sem tokens); `dbt-profiles.json` e `dbt-profiles/<id>/profiles.yml` (dbt, sem senhas); `migration-audit/` (projetos, baselines, execuções e exportações do Migration Audit — podem conter dados auditados); `assistant-chat-<projeto>.json` (conversas do Assistente IA);
 - `history.json`: histórico SQL; `recentProjects.json`: projetos recentes; `project-<…>.json`: `ProjectSettings` de cada projeto (layout, arquivos abertos, breakpoints, configurações de execução, interpretador, pastas expandidas, consoles).
 
-Preferências de interface (tema, tamanho de fonte, "abrir projeto em") ficam no `localStorage`; sempre envolva o acesso em `try/catch`. Quando o app se chamava "Beaver Grip", o identificador era `dev.beavergrip.app`; `store::migrate_legacy` copia esses arquivos uma única vez.
+Preferências de interface (tema, tamanho de fonte, "abrir projeto em", posição das janelas, `update.auto`, `assistant.*`) ficam no `localStorage`; sempre envolva o acesso em `try/catch`. Quando o app se chamava "Beaver Grip", o identificador era `dev.beavergrip.app`; `store::migrate_legacy` copia esses arquivos uma única vez.
 
 
 ### 5.9 Plugin Apache Airflow
@@ -358,6 +374,15 @@ Plugin opcional (`plugin.assistant`, `LAZY_PLUGINS`). Um chat na tool window `as
 - **Ferramentas** (`tools.ts`): todas com `readOnlyHint` (o Codex só chama ferramentas MCP sem aprovação quando elas se declaram somente leitura). Reaproveitam as APIs da IDE: editores (inclusive texto não salvo), `lsp.diagnostics`, `store.connections` (sem senhas), `api.completion/columns/indexes`, `AirflowApi`, `dbt.artifacts`, notebooks abertos do plugin Jupyter, `docker ps` e `audit.projects/history`. Consultas do agente passam por `assistant_db_query` → `export::stream_query` (transação somente leitura, até 2000 linhas, 60 s). Saídas cortadas em 60 mil caracteres. **Nunca** exponha senhas, tokens ou comandos que escrevam por aqui; ferramenta nova = entrada em `TOOLS` + caso em `runTool()` + linha na tabela de `docs/assistente-ia.md`.
 - **Chat** (`panel.ts`): streaming (`stream_event` → `delta`), cartões por ferramenta, Markdown pelo `renderMarkdown` do Jupyter (sanitizado), aprovação com diff para `Edit`/`Write`, "Sempre permitir nesta conversa". Conversa por projeto no documento `assistant-chat-<projeto>` (últimas 200 mensagens + sessões por agente); preferências no `localStorage` `assistant.*`.
 
+### 5.14 Atualizações
+`updater.rs` consulta `api.github.com/repos/hugaojanuario/rits/releases/latest`, compara a versão (`parse_version`/`is_newer`, semver simples) e devolve `UpdateInfo` com o asset da plataforma (`asset_name()`: `Rits-windows-x64-setup.exe` ou `Rits-macos-arm64.dmg`). `update.ts` verifica 5 s depois de abrir e a cada 6 h (desligável em Configurações › Sobre; `localStorage` `update.auto`), notifica uma vez por versão (`update.notified`) e mostra o botão "Atualizar para X" na barra de título **só** quando há versão mais nova.
+
+`update_install` baixa o asset (evento `update-progress`), confere o SHA-256 com o `SHA256SUMS.txt` da mesma release (sem ele, recusa) e instala:
+- **Windows**: roda o instalador NSIS com `/P /UPDATE /R` (sem interação, reabre o app) desanexado e fecha o Rits.
+- **macOS**: `install_dmg` monta o DMG (`hdiutil attach -readonly`), copia o bundle com `ditto` para uma pasta temporária ao lado do destino, tira a quarentena, troca o bundle com rollback em caso de falha e reabre o app. Se o app roda por App Translocation, o destino passa a ser `/Applications/Rits.app`.
+
+Ao mudar o nome dos instaladores, mude `asset_name()`, `scripts/release.mjs`, os READMEs e o `install-macos.sh` juntos.
+
 ---
 
 ## 6. Convenções de código
@@ -402,6 +427,8 @@ Plugin opcional (`plugin.assistant`, `LAZY_PLUGINS`). Um chat na tool window `as
 ## 8. Armadilhas conhecidas
 
 - **O `@codemirror/lsp-client` é minimalista** (veja 5.4). Antes de "simplificar" `lsp.ts`, entenda `patchInitialize` e o tratamento de pedidos do servidor.
+- **Argumentos para launchers `.cmd` do npm** (`claude.cmd`, `codex.cmd`, `npx.cmd`) passam pelo `cmd.exe`: nunca mande texto do usuário, quebras de linha ou aspas por argumento; use o stdin (como o Assistente IA). `tests/windows_compat.rs` cobre os formatos usados.
+- **Flags variádicas do Claude Code** (`--allowedTools`, `--mcp-config`) engolem os argumentos seguintes: use `--flag=valor` ou ponha outra flag depois.
 - **O Windows não diferencia maiúsculas em caminhos**: compare chaves sempre em minúsculas (`Editors.key`, `settings.breakpoints`).
 - **CRLF**: os editores trabalham com LF. A conversão acontece só em `fs_read`/`fs_write`. Com `core.autocrlf=true`, o `git show HEAD:` devolve LF.
 - **O `python` do PATH pode ser o atalho falso da Microsoft Store** (`WindowsApps`). `sdk.findInterpreters()` o ignora; nunca dependa de `python` sem caminho.

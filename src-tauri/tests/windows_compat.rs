@@ -37,6 +37,44 @@ async fn npm_style_launcher_preserves_arguments() {
     assert_eq!(serde_json::from_str::<Vec<String>>(&result.stdout).unwrap(), args);
 }
 
+/// The AI assistant runs `claude.cmd`/`codex.cmd`/`npx.cmd` (npm launchers) with these argument
+/// shapes; the user's text goes through stdin, never the command line.
+#[tokio::test]
+async fn assistant_cli_arguments_through_npm_launcher() {
+    let dir = std::env::temp_dir().join(format!("rits-ai-{} ação", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let node = which("node", &[]).expect("Node.js (development prerequisite)");
+    std::fs::write(
+        dir.join("echo.cjs"),
+        "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify({args:process.argv.slice(2),stdin:s})))",
+    )
+    .unwrap();
+    std::fs::write(dir.join("agent.cmd"), format!("@\"{node}\" \"%~dp0echo.cjs\" %*\r\n")).unwrap();
+    let args: Vec<String> = vec![
+        "-p".into(),
+        "--mcp-config".into(),
+        "C:/Users/José Silva/AppData/Local/dev.rits.ide/assistant/mcp-c1.json".into(),
+        "--append-system-prompt".into(),
+        "Você está dentro da IDE Rits (engenharia de dados: Python, Go, bancos). O projeto aberto é C:/Projetos/dag's $dev. Use db_query (somente leitura); para Airflow, dbt e Docker use as ferramentas.".into(),
+        "--allowedTools=mcp__rits__ide_context,mcp__rits__db_query,mcp__rits__airflow_runs".into(),
+        "-c".into(),
+        "mcp_servers.rits.url=http://127.0.0.1:51234/mcp".into(),
+        "-c".into(),
+        "mcp_servers.rits.bearer_token_env_var=RITS_MCP_TOKEN".into(),
+        "-c".into(),
+        "sandbox_mode=workspace-write".into(),
+        "-".into(),
+    ];
+    let prompt = "Explique \"isto\" & aquilo | 100% <ok>\nsegunda linha com ação";
+    let result = capture(&dir.join("agent.cmd").to_string_lossy(), &args, "", Some(prompt.to_string()), 20).await;
+    let _ = std::fs::remove_dir_all(&dir);
+    let result = result.unwrap();
+    assert_eq!(result.code, Some(0), "{}", result.stderr);
+    let v: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    assert_eq!(serde_json::from_value::<Vec<String>>(v["args"].clone()).unwrap(), args);
+    assert_eq!(v["stdin"], prompt);
+}
+
 #[test]
 #[ignore = "uses the current user's Windows Credential Manager"]
 fn airflow_windows_credential_round_trip() {

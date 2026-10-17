@@ -6,7 +6,14 @@
 
 <p align="center">
   <b>The lightweight IDE for data engineering.</b><br>
-  Python and Go code, SQL on nine databases (and compatibles), ER diagrams, Docker, Terraform and Kubernetes, in a single window.
+  Python and Go code, SQL on nine databases (and compatibles), ER diagrams, Airflow, dbt, Jupyter, Docker and an AI assistant with the context of all of it, in a single window.
+</p>
+
+<p align="center">
+  <a href="https://github.com/hugaojanuario/rits/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/hugaojanuario/rits?label=release&color=A08CFF"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%20Apple%20Silicon-555">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
 
 <p align="center">
@@ -21,6 +28,8 @@
 
 ---
 
+**Contents:** [What it is](#what-is-rits) · [Who it is for](#who-it-is-for) · [Plugins](#plugins) · [Highlights](#highlights) · [Installation](#installation) · [Getting started](#getting-started) · [Shortcuts](#main-shortcuts) · [Architecture](#architecture) · [Development](#development) · [Privacy](#data-and-privacy)
+
 ## What is Rits
 
 A data engineering workday usually spans several tools: PyCharm for the Python pipeline, DataGrip or DBeaver to query the database, Docker Desktop to run a local Postgres, one terminal for `terraform plan` and another for `kubectl`.
@@ -31,7 +40,8 @@ A data engineering workday usually spans several tools: PyCharm for the Python p
 - **Query and explore data** in PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse, DuckDB, SQLite, Firebird, MongoDB and compatibles (CockroachDB, Supabase, Redshift…).
 - **Understand the model** with ER diagrams generated from the database: relations, keys and automatic layout.
 - **Run the infrastructure** with Docker, Compose, Terraform and Kubernetes straight from the editor.
-- **Explore and transform** in Jupyter notebooks and dbt projects, and **audit data migrations** between databases (optional plugins).
+- **Orchestrate and transform** with Apache Airflow, dbt projects and Jupyter notebooks, and **audit data migrations** between databases (optional plugins).
+- **Talk to your own Claude Code or Codex** in a chat inside the IDE that sees the project, the databases, the DAGs and everything else that is open.
 
 All with Rits' own look (the *Blocos* layout: tabs in the title bar, panels as cards and a start page for each project) and, on macOS, native **Liquid Glass**.
 
@@ -44,6 +54,20 @@ The user interface is in Brazilian Portuguese.
 - **Data engineers** writing ETL/ELT in Python or Go who spend the day between code and SQL.
 - **Analytics engineers** exploring schemas, comparing databases and needing to see the data model.
 - **Data platform teams** keeping infrastructure (Postgres in Docker, Terraform, Kubernetes manifests) next to the code.
+
+## Plugins
+
+The Rits core is light. Every heavy integration is an **optional plugin**, enabled in Settings › Plugins: when disabled it loads no code and makes no requests. Each plugin window has a **?** button that opens its guide inside the IDE (guides are in Portuguese).
+
+| Plugin | What it does | Guide |
+|---|---|---|
+| **AI assistant** | chat with your Claude Code or Codex, with the IDE context (project, databases, Airflow, dbt, notebooks, Docker) | [assistente-ia.md](docs/assistente-ia.md) |
+| **Migration Audit** | deterministic audit of data conversions between databases, with baseline, reconciliation and report | [migration-audit.md](docs/migration-audit.md) |
+| **Apache Airflow** | DAGs, runs and logs of an Airflow 3, plus a local Docker environment | [airflow.md](docs/airflow.md) |
+| **dbt** | commands with selection and scope preview, results, lineage and navigable `ref()` | [dbt.md](docs/dbt.md) |
+| **Jupyter** | `.ipynb` notebooks in the editor, with a local, remote or Dockerized JupyterLab kernel | [jupyter.md](docs/jupyter.md) |
+| **Docker** | containers, images and volumes, logs and a shell in the container | [docker.md](docs/docker.md) |
+| **Python · Go · Infrastructure (IaC)** | language servers, formatters, debuggers and linters, installed with one click | — |
 
 ## Highlights
 
@@ -62,7 +86,8 @@ The user interface is in Brazilian Portuguese.
 - **Data editor**: paged, with filter and sort, inline editing, a preview of the generated SQL and transactional saves.
 - **ER diagram**: table cards with PK/FK and types, links with cardinality, automatic layout, minimap, search, pan/zoom (trackpad pinch), **SVG** export and copy as **Mermaid**.
 - **MongoDB** with `mongosh`-style commands (`db.orders.find({status: "paid"}).limit(20)`) and inferred relations in the diagram.
-- **DDL**, export (CSV, TSV, JSON, SQL, Markdown, HTML) and **backup/restore** with `pg_dump`/`pg_restore`/`mysqldump`.
+- **Result export** to CSV, TSV, Excel (.xlsx), JSON, JSON Lines, XML, SQL `INSERT`, Markdown and HTML: the visible page or the **full result**, streamed straight to the file in a read-only transaction, with progress and cancel. Any format can also be copied to the clipboard.
+- **DDL** and **backup/restore** with `pg_dump`/`pg_restore`/`mysqldump`.
 - **Per-project connections**: a connection only shows up in the project where it was created, unless you mark it as global.
 
 ### Code
@@ -152,7 +177,8 @@ Full guide (Portuguese): [docs/assistente-ia.md](docs/assistente-ia.md).
 
 - **Blocos** layout: file tabs in the title bar, panels as cards with a tool window switcher, buttons to show or hide each panel, and a quiet status bar.
 - **Project start page**: shortcuts, what was found in the project (Compose, Dockerfile, Terraform, tests) with the right action for each, Run, and a command bar that searches everything or runs a command in the terminal (Tab switches).
-- Tool windows move between the left, right and bottom panels from the ⋮ menu.
+- Tool windows (plugin ones included) move between the left, right and bottom panels by **dragging their icon** or from the right-click menu; the placement applies to every project.
+- **In-app updates**: when a new version exists, a button shows up in the title bar; the installer is downloaded from GitHub, checked against its SHA-256 and installed, and Rits reopens on the new version.
 - **VS Code** (default on macOS) and **JetBrains** keymaps, with shortcuts shown as ⌘⌥⇧ on the Mac.
 - Rits Dark and Rits Light themes, with the brand lilac as the accent, and **Liquid Glass** on macOS 26 (vibrancy on earlier versions).
 
@@ -189,10 +215,11 @@ Plugins also find tools in the standard npm and WinGet folders, including tools 
 ## Getting started
 
 1. **Open a folder** or create a project (Python with `.venv`, Go with `go mod init`, or empty).
-2. **Install the plugins** you need in Settings › Plugins: Python, Go, Infrastructure (IaC), Docker, Apache Airflow, Jupyter, dbt or Migration Audit.
+2. **Install the plugins** you need in Settings › Plugins: Python, Go, Infrastructure (IaC), Docker, Apache Airflow, Jupyter, dbt, Migration Audit or AI assistant.
 3. **Connect a database**: open the Database window (Alt+2, or ⌥2 on the Mac), click **+**, pick the database and fill in the connection.
 4. **See the model**: right-click the schema › **Diagrama ER**.
 5. **Bring up the infra**: create a `compose.yaml` via New › docker-compose.yml and click **Subir** (up) in the editor bar.
+6. **Ask the AI**: with the AI assistant enabled and the Claude Code or Codex CLI logged in, ask "which tables are in the connected database?" or "explain the open file".
 
 ## Main shortcuts
 
@@ -232,13 +259,15 @@ npx tsc --noEmit -p .   # type check
 cd src-tauri && cargo test
 ```
 
-Integration tests (`cargo test -- --ignored`) use Postgres and MySQL in Docker plus the language tools; the steps are in [AGENTS.md](AGENTS.md#3-como-rodar-compilar-e-testar).
+On every push and pull request, the CI workflow runs the type check, the frontend build, a warning-free `cargo build` and `cargo test` on **Windows** and **macOS**. Integration tests (`cargo test -- --ignored`) use Postgres and MySQL in Docker plus the language tools; the steps are in [AGENTS.md](AGENTS.md#3-como-rodar-compilar-e-testar).
 
 ## Data and privacy
 
 - Connections are stored in `connections.json` in the app config folder (`~/Library/Application Support/dev.rits.ide` on macOS, `%APPDATA%\dev.rits.ide` on Windows). **Passwords are still stored in plain text**; Keychain / Credential Manager integration is pending.
 - Downloaded drivers live in `drivers/` in the same folder and can be deleted at any time (they are downloaded again when needed).
 - Jupyter tokens, dbt profile passwords and Airflow secrets live in the OS secret store. Migration Audit projects, baselines and evidence live in `migration-audit/` in the config folder (outside repositories) and may contain data from the audited tables; delete them from the plugin.
+- **AI assistant**: Rits does not talk to any AI provider; the official CLI (Claude Code or Codex) does, with your account. The IDE context reaches the CLI through a local server on `127.0.0.1`, with one token per chat. Passwords and tokens are never handed to the agent, and its database queries run in a read-only transaction.
+- **Updates**: Rits checks the GitHub releases API on start and every 6 hours. Turn it off in Settings › About.
 - Rits sends no telemetry.
 
 ## Credits and license

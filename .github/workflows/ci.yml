@@ -1,0 +1,65 @@
+name: CI
+
+# Every push and pull request: the IDE must build and pass its tests on both supported systems.
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  # warnings fail the build (dependencies keep their lints capped by cargo)
+  RUSTFLAGS: "-D warnings"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ci-${{ matrix.platform }}
+      - run: npm ci
+      - name: Checar tipos e gerar o frontend
+        run: npm run build
+      - name: Validar comandos do Windows
+        if: matrix.platform == 'windows'
+        shell: powershell
+        run: |
+          $smokeAppData = Join-Path $env:RUNNER_TEMP 'rits-docker-fixture'
+          $smokeDesktop = Join-Path $smokeAppData 'Programs\DockerDesktop\Docker Desktop.exe'
+          New-Item -ItemType Directory -Path (Split-Path $smokeDesktop) -Force | Out-Null
+          New-Item -ItemType File -Path $smokeDesktop -Force | Out-Null
+          $env:LOCALAPPDATA = $smokeAppData
+          node dev/windows-smoke.mjs
+      # The Tauri CLI first: it syncs macos-private-api with the platform config before cargo runs
+      # (tauri-build checks the features of the common dependency).
+      - name: Compilar o app (debug, sem instalador)
+        run: npm run tauri build -- --debug --no-bundle
+      - name: Testar backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked

@@ -6,7 +6,14 @@
 
 <p align="center">
   <b>A IDE leve para engenharia de dados.</b><br>
-  Código Python e Go, SQL em nove bancos (e compatíveis), diagramas ER, Docker, Terraform e Kubernetes, numa janela só.
+  Código Python e Go, SQL em nove bancos (e compatíveis), diagramas ER, Airflow, dbt, Jupyter, Docker e um assistente de IA com o contexto de tudo isso, numa janela só.
+</p>
+
+<p align="center">
+  <a href="https://github.com/hugaojanuario/rits/releases/latest"><img alt="Última versão" src="https://img.shields.io/github/v/release/hugaojanuario/rits?label=vers%C3%A3o&color=A08CFF"></a>
+  <img alt="Plataformas" src="https://img.shields.io/badge/plataformas-Windows%2011%20%7C%20macOS%20Apple%20Silicon-555">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB">
+  <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-green"></a>
 </p>
 
 <p align="center">
@@ -21,6 +28,8 @@
 
 ---
 
+**Sumário:** [O que é](#o-que-é-o-rits) · [Para quem é](#para-quem-é) · [Plugins](#plugins) · [Destaques](#destaques) · [Instalação](#instalação) · [Primeiros passos](#primeiros-passos) · [Atalhos](#atalhos-principais) · [Arquitetura](#arquitetura) · [Desenvolvimento](#desenvolvimento) · [Privacidade](#dados-e-privacidade)
+
 ## O que é o Rits
 
 Um dia de trabalho de engenharia de dados costuma passar por várias ferramentas: o PyCharm para o pipeline em Python, o DataGrip ou o DBeaver para consultar o banco, o Docker Desktop para subir o Postgres local, um terminal para o `terraform plan` e mais um para o `kubectl`.
@@ -31,7 +40,8 @@ O **Rits** junta esse fluxo numa IDE desktop rápida e leve:
 - **Consulte e explore os dados** em PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse, DuckDB, SQLite, Firebird, MongoDB e compatíveis (CockroachDB, Supabase, Redshift…).
 - **Entenda o modelo** com diagramas ER gerados do banco, com relações, chaves e layout automático.
 - **Suba a infraestrutura** com Docker, Compose, Terraform e Kubernetes direto do editor.
-- **Explore e transforme** em notebooks Jupyter e projetos dbt, e **audite migrações de dados** entre bancos (plugins opcionais).
+- **Orquestre e transforme** com Apache Airflow, projetos dbt e notebooks Jupyter, e **audite migrações de dados** entre bancos (plugins opcionais).
+- **Converse com o seu Claude Code ou Codex** num chat dentro da IDE que enxerga o projeto, os bancos, as DAGs e o resto do que está aberto.
 
 Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em cartões e uma tela de início para cada projeto) e, no macOS, com o **Liquid Glass** nativo.
 
@@ -42,6 +52,20 @@ Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em c
 - **Engenheiros de dados** que escrevem ETL/ELT em Python ou Go e passam o dia entre código e SQL.
 - **Analytics engineers** que exploram schemas, comparam bancos e precisam ver o modelo de dados.
 - **Times de plataforma de dados** que mantêm a infraestrutura (Postgres no Docker, Terraform, manifestos Kubernetes) junto do código.
+
+## Plugins
+
+O núcleo do Rits é leve. Cada integração pesada é um **plugin opcional**, ativado em Configurações › Plugins: desativado, não carrega código nem faz requisições. Cada janela de plugin tem um botão **?** que abre o guia dentro da IDE.
+
+| Plugin | O que faz | Guia |
+|---|---|---|
+| **Assistente IA** | chat com o seu Claude Code ou Codex, com o contexto da IDE (projeto, bancos, Airflow, dbt, notebooks, Docker) | [assistente-ia.md](docs/assistente-ia.md) |
+| **Migration Audit** | auditoria determinística de conversões de dados entre bancos, com baseline, reconciliação e relatório | [migration-audit.md](docs/migration-audit.md) |
+| **Apache Airflow** | DAGs, execuções e logs de um Airflow 3, e um ambiente local com Docker | [airflow.md](docs/airflow.md) |
+| **dbt** | comandos com seleção e prévia do alcance, resultados, linhagem e `ref()` navegável | [dbt.md](docs/dbt.md) |
+| **Jupyter** | notebooks `.ipynb` no editor, com kernel local, remoto ou JupyterLab no Docker | [jupyter.md](docs/jupyter.md) |
+| **Docker** | containers, imagens e volumes, logs e shell no container | [docker.md](docs/docker.md) |
+| **Python · Go · Infraestrutura (IaC)** | servidores de linguagem, formatadores, depuradores e linters, instalados com um clique | — |
 
 ## Destaques
 
@@ -60,7 +84,8 @@ Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em c
 - **Editor de dados** paginado, com filtro e ordenação, edição inline, preview do SQL gerado e gravação em transação.
 - **Diagrama ER**: cartões de tabela com PK/FK e tipos, ligações com cardinalidade, layout automático, minimapa, busca, pan/zoom (pinça no trackpad), exportação para **SVG** e cópia como **Mermaid**.
 - **MongoDB** com comandos no estilo `mongosh` (`db.pedidos.find({status: "pago"}).limit(20)`) e relações inferidas no diagrama.
-- **DDL**, exportação (CSV, TSV, JSON, SQL, Markdown, HTML) e **backup/restore** com `pg_dump`/`pg_restore`/`mysqldump`.
+- **Exportação de resultados** em CSV, TSV, Excel (.xlsx), JSON, JSON Lines, XML, `INSERT` SQL, Markdown e HTML: da página visível ou do **resultado completo**, transmitido direto para o arquivo em transação somente leitura, com progresso e cancelamento. Também copia para a área de transferência em qualquer formato.
+- **DDL** e **backup/restore** com `pg_dump`/`pg_restore`/`mysqldump`.
 - **Conexões por projeto**: cada conexão aparece só no projeto em que foi criada, a menos que você a marque como global.
 
 ### Código
@@ -150,7 +175,8 @@ Guia completo: [docs/assistente-ia.md](docs/assistente-ia.md).
 
 - Layout **Blocos**: abas dos arquivos na barra de título, painéis em cartões com um seletor de janelas de ferramentas, botões para mostrar ou esconder cada painel e uma barra de status discreta.
 - **Tela de início do projeto**: atalhos, o que foi encontrado no projeto (Compose, Dockerfile, Terraform, testes) com a ação certa para cada um, Executar e uma barra de comando que busca em tudo ou roda um comando no terminal (Tab alterna).
-- Janelas de ferramentas movidas entre os painéis esquerdo, direito e inferior pelo menu ⋮.
+- Janelas de ferramentas (inclusive as dos plugins) movidas entre os painéis esquerdo, direito e inferior **arrastando o ícone** ou pelo botão direito; a posição vale para todos os projetos.
+- **Atualizações pelo próprio app**: quando há uma versão nova, aparece um botão na barra de título; o instalador é baixado do GitHub, conferido pelo SHA-256 e instalado, e o Rits reabre na versão nova.
 - Keymaps **VS Code** (padrão no macOS) e **JetBrains**, com os atalhos exibidos com ⌘⌥⇧ no Mac.
 - Temas Rits Escuro e Rits Claro, com o lilás da marca como cor de destaque, e **Liquid Glass** no macOS 26 (vibrancy nas versões anteriores).
 - Interface toda em português.
@@ -188,10 +214,11 @@ Os plugins também encontram ferramentas nas pastas padrão do npm e WinGet, mes
 ## Primeiros passos
 
 1. **Abra uma pasta** ou crie um projeto (Python com `.venv`, Go com `go mod init`, ou vazio).
-2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC), Docker, Apache Airflow, Jupyter, dbt ou Migration Audit.
+2. **Instale os plugins** que for usar em Configurações › Plugins: Python, Go, Infraestrutura (IaC), Docker, Apache Airflow, Jupyter, dbt, Migration Audit ou Assistente IA.
 3. **Conecte um banco**: abra a janela Database (Alt+2, ou ⌥2 no Mac), clique em **+**, escolha o banco e preencha a conexão.
 4. **Veja o modelo**: clique direito no schema › **Diagrama ER**.
 5. **Suba a infra**: crie um `compose.yaml` em Novo › docker-compose.yml e clique em **Subir** na barra do editor.
+6. **Pergunte à IA**: com o Assistente IA ativo e o CLI do Claude Code ou do Codex logado, pergunte "quais tabelas existem no banco conectado?" ou "explique o arquivo aberto".
 
 ## Atalhos principais
 
@@ -231,13 +258,15 @@ npx tsc --noEmit -p .   # checagem de tipos
 cd src-tauri && cargo test
 ```
 
-Os testes de integração (`cargo test -- --ignored`) usam Postgres e MySQL no Docker e as ferramentas de linguagem; o passo a passo está no [AGENTS.md](AGENTS.md#3-como-rodar-compilar-e-testar).
+A cada push e pull request, o workflow de CI roda a checagem de tipos, o build do frontend, o `cargo build` sem warnings e o `cargo test` no **Windows** e no **macOS**. Os testes de integração (`cargo test -- --ignored`) usam Postgres e MySQL no Docker e as ferramentas de linguagem; o passo a passo está no [AGENTS.md](AGENTS.md#3-como-rodar-compilar-e-testar).
 
 ## Dados e privacidade
 
 - As conexões ficam em `connections.json` na pasta de configuração do app (`~/Library/Application Support/dev.rits.ide` no macOS, `%APPDATA%\dev.rits.ide` no Windows). **As senhas ainda são guardadas em texto puro**; a integração com o Keychain e o Credential Manager está pendente.
 - Os drivers baixados ficam em `drivers/` na mesma pasta e podem ser apagados quando quiser (são baixados de novo quando necessário).
 - Tokens do Jupyter, senhas dos perfis do dbt e segredos do Airflow ficam no cofre do sistema. Projetos, baselines e evidências do Migration Audit ficam em `migration-audit/` na pasta de configuração (fora dos repositórios) e podem conter dados das tabelas auditadas; exclua-os pelo próprio plugin.
+- **Assistente IA**: o Rits não fala com nenhum provedor de IA; quem fala é o CLI oficial (Claude Code ou Codex), com a sua conta. O contexto da IDE chega ao CLI por um servidor local em `127.0.0.1`, com um token por conversa. Senhas e tokens nunca são entregues ao agente, e as consultas dele ao banco rodam em transação somente leitura.
+- **Atualizações**: o Rits consulta a API de releases do GitHub ao abrir e a cada 6 horas. Desligue em Configurações › Sobre.
 - O Rits não envia telemetria.
 
 ## Créditos e licença
