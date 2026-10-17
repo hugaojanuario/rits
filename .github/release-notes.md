@@ -1,13 +1,14 @@
-O Rits reúne código Python e Go, bancos de dados, orquestração e infraestrutura em uma IDE leve. A versão 0.6.0 traz mais controle e atalhos ao Assistente IA:
+O Rits reúne código Python e Go, bancos de dados, orquestração e infraestrutura em uma IDE leve. A versão 0.6.1 corrige o ditado do Assistente IA:
 
-- **Modelo, versão e esforço**: escolha o modelo (Fable, Opus, Sonnet ou Haiku, sempre o mais recente ou uma versão fixa, ou qualquer outro nome) e o esforço de raciocínio, de baixo a máximo. No Codex, a lista de modelos e de níveis vem da sua conta. A linha de status mostra o modelo realmente em uso, e a troca vale na próxima mensagem, sem perder a conversa.
-- **Comandos e skills com `/`**: digite `/` para ver os comandos e as skills do projeto, os seus e os dos plugins do Claude Code, com a descrição de cada um. No Codex, as skills e os prompts salvos também funcionam.
-- **Arquivos com `@`**: digite `@` para procurar arquivos e pastas do projeto; o conteúdo vai junto com a pergunta, inclusive o que ainda não foi salvo.
-- **Ditado pelo microfone**: clique no microfone e fale; o texto aparece enquanto você fala. Usa o reconhecimento de fala do próprio macOS ou Windows, em português por padrão (botão direito para trocar o idioma). No Mac, o sistema pede permissão para o microfone e para o reconhecimento de fala na primeira vez.
+- **Ditado no Mac sempre no dispositivo**: a partir da segunda gravação, o reconhecimento podia ir para os servidores da Apple e falhar com "Siri and Dictation are disabled". Agora ele sempre roda no próprio Mac quando o idioma está baixado, mesmo com a Siri e o Ditado desligados, e só usa o servidor se o reconhecimento local falhar duas vezes.
+- **Gravações seguidas**: o fim atrasado de uma gravação não encerra mais a seguinte (Mac e Windows).
+- Quando o Ditado do macOS é necessário e está desligado, a mensagem explica onde ativar.
 
-Da 0.5.x: X para fechar notificações, uma linha de espaço no topo do editor, Assistente IA com Claude Code e Codex, exportação de resultados, atualização pelo próprio app e janelas de ferramentas arrastáveis.
+Depois de atualizar, o macOS pode pedir de novo as permissões de Microfone e Reconhecimento de Fala.
 
-Quem está na 0.5.x vê o botão **Atualizar para v0.6.0** na barra de título.
+Da 0.6.0: modelo, versão e esforço no Assistente IA, comandos e skills com `/`, arquivos com `@` e ditado pelo microfone.
+
+Quem está na 0.5.x ou na 0.6.0 vê o botão **Atualizar para v0.6.1** na barra de título.
 
 Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64** ou `Rits-macos-arm64.dmg` para **Mac Apple Silicon**. O arquivo `SHA256SUMS.txt` contém os hashes dos dois instaladores.
 
