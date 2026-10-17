@@ -89,6 +89,8 @@ const handlers: Record<string, (a: any) => unknown> = {
     if (/python/i.test(a.program)) return { code: 0, stdout: "Python 3.12.4\n", stderr: "" };
     return { code: 1, stdout: "", stderr: "mock" };
   },
+  app_version: () => "0.4.2",
+  update_check: () => ({ current: "0.4.2", latest: "v0.5.0", available: params.has("update"), notes: "- Assistente de IA (Claude Code / Codex)\n- Exportação de resultados\n- Correções", page: "https://github.com/hugaojanuario/rits/releases", asset: "Rits-macos-arm64.dmg", size: 11534336, supported: true }),
   "plugin:window|is_maximized": () => false,
   "plugin:event|listen": () => 1,
   "plugin:event|unlisten": () => null,

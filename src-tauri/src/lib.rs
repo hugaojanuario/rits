@@ -3,6 +3,7 @@ pub mod audit;
 pub mod jupyter;
 pub mod dbt;
 pub mod export;
+pub mod updater;
 pub mod secrets;
 pub mod db;
 pub mod store;
@@ -408,6 +409,9 @@ pub fn run() {
             dbt::dbt_project_profile,
             dbt::dbt_artifacts,
             dbt::dbt_compiled,
+            updater::update_check,
+            updater::update_install,
+            updater::app_version,
             export::export_query,
             export::export_cancel,
             export::write_base64_file,

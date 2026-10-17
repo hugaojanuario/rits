@@ -1,5 +1,6 @@
 // Settings dialog: appearance, editor, Python interpreter, Go SDK, plugins, keymap, about.
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { h } from "../util";
 import { icon } from "../icons";
 import { button, modal, notify, toast } from "../ui";
@@ -9,6 +10,7 @@ import { completionSettings, setCompletionSettings, type CompletionSettings } fr
 import { DOCKER_COMPONENTS, DOCKER_INSTALL, dockerEnabled, setDockerEnabled } from "./docker";
 import { airflowEnabled, setAirflowEnabled } from "./airflow/plugin";
 import { pluginEnabled, setPluginEnabled } from "./plugins";
+import { autoCheck, checkNow, setAutoCheck } from "./update";
 import { PLUGINS, clearSdkCache, findGo, findInterpreters, runBackground, setCurrentPython, getCurrentPython, type LangPlugin } from "./sdk";
 import type { Workbench } from "./workbench";
 
@@ -463,13 +465,18 @@ function keymap(wb: Workbench, el: HTMLElement) {
 }
 
 function about(_wb: Workbench, el: HTMLElement) {
+  const ver = h("h2", null, "Rits");
+  invoke<string>("app_version").then((v) => (ver.textContent = `Rits ${v}`)).catch(() => {});
+  const auto = h("input", { type: "checkbox", checked: autoCheck(), onchange: (e: Event) => setAutoCheck((e.target as HTMLInputElement).checked) }) as HTMLInputElement;
   el.append(
     h(
       "div.about",
       { style: "margin-top:30px" },
       icon("logo"),
-      h("h2", null, "Rits 0.2.0"),
-      h("p.dim", null, "IDE leve para Python, Go e bancos de dados — Tauri + Rust + TypeScript."),
+      ver,
+      h("p.dim", null, "IDE leve para engenharia de dados: Python, Go, bancos, infraestrutura e plugins de dados — Tauri + Rust + TypeScript."),
+      h("div", { style: "display:flex;gap:10px;align-items:center;justify-content:center;margin:12px 0" }, button("Verificar atualizações", () => checkNow(true), "", "general/refresh"), h("label.check", null, auto, "Verificar automaticamente")),
+      h("p.hint", null, "A verificação consulta a última release no GitHub (sem enviar dados seus)."),
       h("p.dim", null, "Interface Blocos, do próprio Rits. Ícones derivados do projeto IntelliJ Community (Apache 2.0)."),
       h("p.dim", null, "Fontes: Figtree e JetBrains Mono (SIL OFL)."),
     ),

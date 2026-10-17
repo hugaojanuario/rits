@@ -28,6 +28,7 @@ import { LAZY_PLUGINS, pluginEnabled, type PluginHandle } from "./plugins";
 import { searchEverywhere, findInFiles, gotoLine, recentFiles, fileStructurePopup } from "./search";
 import { openSettings } from "./settings";
 import { openCloneDialog, openNewProjectDialog } from "./welcome";
+import { startUpdateChecks, updateButton } from "./update";
 
 export type Anchor = "left" | "right" | "bottom";
 /** Where a tool window lives: a side card, or the bottom card (remembering its old stripe side). */
@@ -125,6 +126,8 @@ export class Workbench {
     right: h("button.tb-btn.tb-layout", { title: "Painel direito", "aria-label": "Painel direito", onclick: () => this.toggleSide("right", "airflow") }, icon("panelRight")),
   };
   readonly runWidget = h("div.run-widget");
+  /** Shown only when a newer release exists (update.ts). */
+  private updBtn = updateButton();
   private lspLog: string[] = [];
 
   constructor(root: string) {
@@ -229,6 +232,7 @@ export class Workbench {
 
     this.installKeys();
     import("./macos").then((m) => m.checkQuarantine()).catch(() => {});
+    startUpdateChecks();
     this.renderStatus();
     this.updateTitle();
     touchRecent(this.root, this.git.branch ?? undefined);
@@ -682,6 +686,7 @@ export class Workbench {
       this.layoutBtns.bottom,
       this.layoutBtns.right,
       h("span.tb-sep"),
+      this.updBtn,
       searchBtn,
       settingsBtn,
       h(

@@ -1210,6 +1210,14 @@ body.tw-dragging, body.tw-dragging * { cursor: grabbing !important; user-select:
 .glass .afd-node { border-radius: 10px; box-shadow: var(--rim), 0 2px 8px rgba(0, 0, 0, 0.15); }
 
 
+/* updates */
+.upd-btn { width: auto !important; padding: 0 10px !important; gap: 6px; background: var(--accent) !important; color: var(--on-accent) !important; border-radius: 999px; font-weight: 600; }
+.upd-btn .ic { filter: var(--on-accent-icon); }
+.upd-btn.hidden { display: none !important; }
+.upd-notes { max-height: 260px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 var(--mono); background: var(--island-2); padding: 10px; border-radius: 8px; margin: 10px 0; }
+.upd-bar { height: 6px; border-radius: 3px; background: var(--sel-inactive); overflow: hidden; margin: 8px 0 4px; }
+.upd-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+
 /* query export */
 .export-btn { gap: 4px; padding: 0 8px; }
 .export-progress { position: fixed; right: 16px; bottom: 40px; z-index: 900; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--popup); border: 1px solid var(--border-2); box-shadow: var(--shadow); font-size: 12.5px; }
