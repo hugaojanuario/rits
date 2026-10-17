@@ -85,6 +85,8 @@ Tudo com o visual próprio do Rits (layout *Blocos*: abas no topo, painéis em c
 
 Limitações: requer Airflow 3 (o Airflow 2 é detectado e recusado); o ambiente local precisa do Docker com cerca de 4 GB de RAM e baixa ~3,2 GB de imagens na primeira vez; o painel web oficial abre numa janela separada ou no navegador.
 
+Guia completo: [docs/airflow.md](docs/airflow.md).
+
 ### Jupyter (plugin)
 
 - Notebooks `.ipynb` (nbformat 4) no **editor da própria IDE**: células Python e Markdown, executar célula, executar daqui em diante e executar tudo, com contadores e ordem das saídas preservados. Células, metadados e saídas desconhecidas são mantidos ao salvar.
@@ -96,6 +98,8 @@ Limitações: requer Airflow 3 (o Airflow 2 é detectado e recusado); o ambiente
 
 Validado com Jupyter Server 2.21.1 / JupyterLab 4.6.4. Limitações: widgets interativos (ipywidgets) e LaTeX em Markdown não são renderizados (use o JupyterLab); autenticação por senha do Jupyter não é suportada (use token); desativar o plugin fecha as conexões da IDE, mas não para servidores nem kernels.
 
+Guia completo: [docs/jupyter.md](docs/jupyter.md).
+
 ### dbt (plugin)
 
 - Detecta projetos pelo `dbt_project.yml` e cria novos com o comando oficial `dbt init`.
@@ -106,6 +110,8 @@ Validado com Jupyter Server 2.21.1 / JupyterLab 4.6.4. Limitações: widgets int
 - Lê `manifest.json` e `run_results.json` (com checagem de versão do schema e aviso de resultados antigos), mostra falhas que abrem o arquivo, linhagem, SQL compilado, navegação por `ref()`/`source()` com Ctrl/⌘+clique, realce de Jinja e modelos de arquivo (modelo, sources, testes, teste unitário, seed, snapshot).
 
 Validado com dbt Core 1.12.6 e dbt-postgres 1.11.0 (artefatos manifest v12, run_results v6). O dbt v2 é detectado e avisado, mas não foi validado. O grafo de dependências não é um agendador: execuções periódicas ficam com o Airflow ou outro orquestrador.
+
+Guia completo: [docs/dbt.md](docs/dbt.md).
 
 ### Migration Audit (plugin)
 
@@ -120,6 +126,8 @@ Auditoria de **conversões de dados** entre um banco de origem e um de destino, 
 - Relatório navegável (unidade → tipo → identidades paginadas, valores sensíveis mascarados) e exportação: relatório HTML autocontido, manifesto JSON, resumo CSV e listas completas em CSV (com proteção contra fórmulas).
 
 Bancos: PostgreSQL, MySQL, MariaDB, SQL Server e Firebird — todos validados com testes de integração reais (PostgreSQL 17, MySQL 8.4, MariaDB 11.8, SQL Server 2022, Firebird 5). Limitações: MongoDB fica fora desta versão; no SQL Server as consultas personalizadas não rodam em transação somente leitura (use um login somente leitura) e o snapshot exige `ALLOW_SNAPSHOT_ISOLATION`; fusos com horário de verão não são suportados nas regras (só deslocamentos fixos); relações 1:N e N:1 exigem conjuntos normalizados por consulta para comparação completa.
+
+Guia completo: [docs/migration-audit.md](docs/migration-audit.md).
 
 ### Assistente IA: Claude Code e Codex (plugin)
 

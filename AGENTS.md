@@ -210,6 +210,7 @@ assets/logo-mark.svg       só a marca, sem fundo: um "R" sólido e inclinado, l
                            e apague as pastas android/ e ios/ que o comando cria (o app é só desktop);
                            a versão de 20 px usada na interface é o "logo" em src/icons.ts
 README.md / README.en.md   documentação para o usuário em pt-BR (principal) e em inglês: mantenha as duas em sincronia
+docs/                      guias de uso dos plugins (pt-BR), um .md por plugin; abertos na IDE pelo botão "?" (src/ide/docs.ts)
 dev/                       mocks de navegador: banco (mock.html) e janela da IDE (ide-mock.html)
 ```
 
@@ -390,7 +391,7 @@ Plugin opcional (`plugin.assistant`, `LAZY_PLUGINS`). Um chat na tool window `as
 
 **Adicionar uma tool window**: crie uma classe que recebe `wb`, chame `wb.register({...})` no construtor, instancie em `Workbench.mount()`, ponha o atalho em `installKeys()` e acrescente o item em "Exibir › Janelas de ferramentas", que é gerado sozinho.
 
-**Adicionar um plugin opcional**: inclua uma entrada em `LAZY_PLUGINS` (`plugins.ts`) com um módulo que implemente `PluginHandle` (`dispose()` obrigatório, `newItems()` opcional) e, se precisar do editor, use `contribute()` (abrir arquivos, extensões CodeMirror, ir para definição, barra de ações). Para o card, use `optionalCard()` em `settings.ts`. O Airflow segue o padrão antigo: Um módulo de entrada leve (`enabled()`/`setEnabled()` no `localStorage`, que emitem `rits-plugins`), um card em Configurações › Plugins, o carregamento e o `dispose()` em `Workbench.syncPlugins()` e `unregister()` da tool window. O resto vai por `import()` dinâmico, para não pesar a IDE de quem não usa. O `dispose()` precisa parar timers, processos e requisições.
+**Adicionar um plugin opcional**: inclua uma entrada em `LAZY_PLUGINS` (`plugins.ts`) com um módulo que implemente `PluginHandle` (`dispose()` obrigatório, `newItems()` opcional) e, se precisar do editor, use `contribute()` (abrir arquivos, extensões CodeMirror, ir para definição, barra de ações). Para o card, use `optionalCard()` em `settings.ts`. O Airflow segue o padrão antigo: Um módulo de entrada leve (`enabled()`/`setEnabled()` no `localStorage`, que emitem `rits-plugins`), um card em Configurações › Plugins, o carregamento e o `dispose()` em `Workbench.syncPlugins()` e `unregister()` da tool window. O resto vai por `import()` dinâmico, para não pesar a IDE de quem não usa. O `dispose()` precisa parar timers, processos e requisições. Escreva o guia em `docs/<plugin>.md` (pt-BR, para o usuário), registre-o em `PLUGIN_DOCS` (`src/ide/docs.ts`, chave = id da tool window) e ponha a linha no `docs/README.md`: o botão "?" aparece sozinho no cabeçalho da janela.
 
 **Adicionar uma ação**: inclua em `actions()` de `search.ts` (para aparecer em Ctrl+Shift+A e no Shift duplo) e, se couber, no `mainMenu()` de `workbench.ts`.
 
@@ -424,4 +425,4 @@ Plugin opcional (`plugin.assistant`, `LAZY_PLUGINS`). Um chat na tool window `as
 2. `cd src-tauri && cargo build` sem warnings e `cargo test` verde. Se mexeu em banco, backup, LSP ou DAP, rode também os `--ignored` (seção 3).
 3. Se mudou a interface, abra o app (`npm run tauri dev`) e confira o fluxo de verdade.
 4. Não commite `node_modules/`, `dist/`, `src-tauri/target/` nem `src-tauri/gen/` (já estão no `.gitignore`), nem credenciais ou conexões de teste.
-5. Atualize o `README.md` e o `README.en.md` (para o usuário, nos dois idiomas) e este `AGENTS.md` (para quem programa) quando o comportamento ou a estrutura mudar.
+5. Atualize o `README.md` e o `README.en.md` (para o usuário, nos dois idiomas), o guia do plugin em `docs/` e este `AGENTS.md` (para quem programa) quando o comportamento ou a estrutura mudar.

@@ -87,6 +87,8 @@ The user interface is in Brazilian Portuguese.
 
 Limitations: requires Airflow 3 (Airflow 2 is detected and rejected); the local environment needs Docker with about 4 GB of RAM and downloads ~3.2 GB of images the first time; the official web UI opens in a separate window or in the browser.
 
+Full guide (Portuguese): [docs/airflow.md](docs/airflow.md).
+
 ### Jupyter (plugin)
 
 - `.ipynb` notebooks (nbformat 4) in the **IDE's own editor**: Python and Markdown cells, run cell, run from here and run all, keeping execution counters and output order. Unknown cells, metadata and outputs are preserved on save.
@@ -98,6 +100,8 @@ Limitations: requires Airflow 3 (Airflow 2 is detected and rejected); the local 
 
 Validated with Jupyter Server 2.21.1 / JupyterLab 4.6.4. Limitations: interactive widgets (ipywidgets) and LaTeX in Markdown are not rendered (use JupyterLab); Jupyter password login is not supported (use a token); disabling the plugin closes the IDE's connections but never stops servers or kernels.
 
+Full guide (Portuguese): [docs/jupyter.md](docs/jupyter.md).
+
 ### dbt (plugin)
 
 - Detects projects by `dbt_project.yml` and creates new ones with the official `dbt init`.
@@ -108,6 +112,8 @@ Validated with Jupyter Server 2.21.1 / JupyterLab 4.6.4. Limitations: interactiv
 - Reads `manifest.json` and `run_results.json` (schema version checks, stale-result warnings), lists failures that open their files, lineage, compiled SQL, `ref()`/`source()` navigation with Ctrl/⌘+click, Jinja highlighting and file templates (model, sources, tests, unit test, seed, snapshot).
 
 Validated with dbt Core 1.12.6 and dbt-postgres 1.11.0 (manifest v12, run_results v6). dbt v2 is detected and flagged but not validated. The dependency graph is not a scheduler: periodic runs belong to Airflow or another orchestrator.
+
+Full guide (Portuguese): [docs/dbt.md](docs/dbt.md).
 
 ### Migration Audit (plugin)
 
@@ -122,6 +128,8 @@ Audits **data conversions** between a source and a target database with **determ
 - Browsable report (unit → kind → paginated identities, sensitive values masked) and exports: self-contained HTML report, JSON manifest, CSV summary and full CSV lists (protected against spreadsheet formulas).
 
 Databases: PostgreSQL, MySQL, MariaDB, SQL Server and Firebird — all validated by real integration tests (PostgreSQL 17, MySQL 8.4, MariaDB 11.8, SQL Server 2022, Firebird 5). Limitations: MongoDB is out of this version; on SQL Server custom queries do not run in a read-only transaction (use a read-only login) and snapshots need `ALLOW_SNAPSHOT_ISOLATION`; time zones with daylight saving are not supported in rules (fixed offsets only); 1:N and N:1 relations need datasets normalized by queries for a complete comparison.
+
+Full guide (Portuguese): [docs/migration-audit.md](docs/migration-audit.md).
 
 ### AI assistant: Claude Code and Codex (plugin)
 

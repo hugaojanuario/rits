@@ -29,6 +29,7 @@ import { searchEverywhere, findInFiles, gotoLine, recentFiles, fileStructurePopu
 import { openSettings } from "./settings";
 import { openCloneDialog, openNewProjectDialog } from "./welcome";
 import { startUpdateChecks, updateButton } from "./update";
+import { docButton } from "./docs";
 
 export type Anchor = "left" | "right" | "bottom";
 /** Where a tool window lives: a side card, or the bottom card (remembering its old stripe side). */
@@ -445,7 +446,8 @@ export class Workbench {
     seg.append(overflow);
     this.fitSegments(anchor, seg, overflow, members, tw);
     const more = h("button.icon-btn", { title: "Opções", "aria-label": "Opções", onclick: (e: MouseEvent) => this.twMenu(tw, e) }, icon("general/moreVertical"));
-    const actions = tw.actions?.() ?? [];
+    // plugin windows: a "?" that opens the plugin guide (docs/*.md) in a tab
+    const actions = [...(tw.actions?.() ?? []), docButton(this, tw.id)].filter((x): x is HTMLElement => !!x);
     const head =
       anchor === "bottom"
         ? h("div.card-head", null, h("div.card-row", null, seg, tw.headerTabs ? h("span.card-sep") : null, tw.headerTabs ?? null, h("span.grow"), ...actions, more))
