@@ -128,6 +128,8 @@ export class Workbench {
   private lspLog: string[] = [];
 
   constructor(root: string) {
+    // the title bar panel buttons accept tool windows dragged from a card (even a closed one)
+    for (const a of ["left", "bottom", "right"] as Anchor[]) this.layoutBtns[a].dataset.twZone = a;
     this.root = P.norm(root);
     this.name = P.base(this.root);
     window.addEventListener("rits-keymap", () => {
@@ -421,8 +423,10 @@ export class Workbench {
             class: t === tw ? "active" : "",
             role: "tab",
             "aria-selected": t === tw ? "true" : "false",
-            title: t.title + (displayShortcut(t.shortcut) ? `  ${displayShortcut(t.shortcut)}` : ""),
-            onclick: () => t !== tw && this.show(t.id, true),
+            title: t.title + (displayShortcut(t.shortcut) ? `  ${displayShortcut(t.shortcut)}` : "") + " — arraste para outro painel ou clique com o botão direito para mover",
+            onclick: () => !this.twDragged && t !== tw && this.show(t.id, true),
+            onpointerdown: (e: PointerEvent) => this.startTwDrag(t, e),
+            oncontextmenu: (e: MouseEvent) => (e.preventDefault(), this.twMenu(t, e)),
           },
           twIcon(t.icon),
           h("span.seg-label", null, t.title),
@@ -430,6 +434,7 @@ export class Workbench {
         ),
       ),
     );
+    seg.dataset.twZone = anchor;
     // Segments that do not fit go to a "⋮" overflow button at the end of the switcher.
     const overflow = h("button.seg-btn.seg-more", { title: "Mais janelas", "aria-label": "Mais janelas de ferramentas" }, icon("general/moreVertical")) as HTMLButtonElement;
     seg.append(overflow);
@@ -451,6 +456,71 @@ export class Workbench {
   }
 
   private segObservers: Partial<Record<Anchor, ResizeObserver>> = {};
+  /** A segment was dragged: the click that ends the drag must not switch tool windows. */
+  private twDragged = false;
+
+  /** Moves a tool window to another card (keeping the card it left open with another window). */
+  moveToolWindow(tw: ToolWindow, zone: StripeZone, index = Number.MAX_SAFE_INTEGER) {
+    const from = tw.anchor;
+    this.placeToolWindow(tw, zone, index);
+    this.show(tw.id, true);
+    if (from !== tw.anchor && !this.visible[from]) {
+      const rest = this.zoneMembers(from);
+      if (rest.length) this.show(rest[0].id);
+    }
+  }
+
+  /** Pointer-based drag of a segment to another card or to a title bar panel button (HTML5 drag
+   *  and drop is intercepted by the native window on Windows, so it is not used). */
+  private startTwDrag(tw: ToolWindow, e: PointerEvent) {
+    if (e.button !== 0) return;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let ghost: HTMLElement | null = null;
+    let target: HTMLElement | null = null;
+    this.twDragged = false;
+    const zoneAt = (x: number, y: number) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-tw-zone]") ?? null;
+    const move = (ev: PointerEvent) => {
+      if (!ghost) {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+        this.twDragged = true;
+        ghost = h("div.tw-drag-ghost", null, twIcon(tw.icon), h("span", null, tw.title));
+        document.body.append(ghost);
+        document.body.classList.add("tw-dragging");
+      }
+      ghost.style.left = ev.clientX + 12 + "px";
+      ghost.style.top = ev.clientY + 12 + "px";
+      const z = zoneAt(ev.clientX, ev.clientY);
+      if (z !== target) {
+        target?.classList.remove("tw-drop");
+        target = z;
+        target?.classList.add("tw-drop");
+      }
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", up, true);
+      document.body.classList.remove("tw-dragging");
+      ghost?.remove();
+      target?.classList.remove("tw-drop");
+      if (ghost && target) {
+        const anchor = target.dataset.twZone as Anchor;
+        let index = Number.MAX_SAFE_INTEGER;
+        if (target.classList.contains("seg")) {
+          const btns = [...target.querySelectorAll<HTMLElement>(".seg-btn:not(.seg-more)")].filter((b) => b.style.display !== "none" && !b.classList.contains("dragging-src"));
+          index = btns.filter((b) => {
+            const r = b.getBoundingClientRect();
+            return r.left + r.width / 2 < ev.clientX;
+          }).length;
+        }
+        const zone: StripeZone = anchor === "bottom" ? (tw.side === "right" ? "bottom-right" : "bottom-left") : anchor;
+        this.moveToolWindow(tw, zone, index);
+      }
+      setTimeout(() => (this.twDragged = false));
+    };
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", up, true);
+  }
 
   /** Hides the segments that overflow the switcher (never the active one) behind the "⋮" button. */
   private fitSegments(anchor: Anchor, seg: HTMLElement, overflow: HTMLButtonElement, members: ToolWindow[], active: ToolWindow) {
@@ -491,8 +561,7 @@ export class Workbench {
 
   private twMenu(tw: ToolWindow, e: MouseEvent) {
     const move = (z: StripeZone) => () => {
-      this.placeToolWindow(tw, z, Number.MAX_SAFE_INTEGER);
-      this.show(tw.id);
+      this.moveToolWindow(tw, z);
     };
     contextMenu(e.clientX, e.clientY, [
       { label: "Mover para o painel esquerdo", icon: "panelLeft", disabled: tw.anchor === "left", action: move("left") },

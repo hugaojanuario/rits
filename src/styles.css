@@ -398,6 +398,9 @@ body.resizing-x *, body.resizing-y * { pointer-events: none; }
 .island.side .seg { flex: 1; }
 .seg::-webkit-scrollbar { height: 0; }
 .seg-more { flex: none; position: relative; }
+.tw-drag-ghost { position: fixed; z-index: 1000; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px; background: var(--popup); border: 1px solid var(--accent); box-shadow: var(--shadow); font-size: 12.5px; color: var(--fg); }
+body.tw-dragging, body.tw-dragging * { cursor: grabbing !important; user-select: none; }
+.seg.tw-drop, .tb-layout.tw-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
 .seg-more.has-badge::after { content: ""; position: absolute; right: 4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
 .island.side .seg-btn.seg-more { width: 28px; }
 .seg-btn {
