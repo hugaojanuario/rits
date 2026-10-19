@@ -16,6 +16,7 @@ export interface ExplorerActions {
   backup: (c: ConnConfig, db: string, schemas?: string[], tables?: string[]) => void;
   restore: (c: ConnConfig, db: string) => void;
   openDiagram: (c: ConnConfig, db: string, schema: string, focus?: string) => void;
+  newScript?: (c: ConnConfig, db?: string, schema?: string) => void;
 }
 
 interface Node {
@@ -206,10 +207,18 @@ export class Explorer {
 
   // ---------- menus ----------
 
+  /** "Novo script SQL…": a .sql file in the project bound to this connection (SQL databases only). */
+  private scriptItem(c: ConnConfig, db?: string, schema?: string): MenuItem[] {
+    const act = this.act.newScript;
+    if (!act || dialect(c.kind).family === "mongo") return [];
+    return [{ label: "Novo script SQL…", icon: "fileTypes/sql", action: () => act(c, db, schema) }];
+  }
+
   private connMenu(c: ConnConfig, n: Node): MenuItem[] {
     const on = store.connected.has(c.id);
     return [
       { label: "Nova console", icon: "console", shortcut: "Ctrl+Shift+L", action: () => this.act.openConsole(c) },
+      ...this.scriptItem(c),
       on
         ? { label: "Desconectar", icon: "unplug", action: () => this.disconnect(c, n) }
         : { label: "Conectar", icon: "plug", action: () => this.expand(n) },
@@ -248,6 +257,7 @@ export class Explorer {
     const d = dialect(c.kind);
     return [
       { label: "Nova console", icon: "console", action: () => this.act.openConsole(c, db) },
+      ...this.scriptItem(c, db),
       ...(!d.schemas ? [{ label: "Diagrama ER", icon: "diagram", action: () => this.act.openDiagram(c, db, db) } as MenuItem] : []),
       { label: "Atualizar", icon: "refresh", action: () => this.reload(n) },
       { separator: true },
@@ -275,6 +285,7 @@ export class Explorer {
   private schemaMenu(c: ConnConfig, db: string, schema: string, n: Node): MenuItem[] {
     return [
       { label: "Nova console", icon: "console", action: () => this.act.openConsole(c, db, schema) },
+      ...this.scriptItem(c, db, schema),
       { label: "Diagrama ER", icon: "diagram", action: () => this.act.openDiagram(c, db, schema) },
       { label: "Atualizar", icon: "refresh", action: () => this.reload(n) },
       { separator: true },

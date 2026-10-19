@@ -985,7 +985,7 @@ export class Editors {
     if (!ed && !o.text) {
       // plugins that open the file in their own view (notebooks...)
       for (const c of editorContributions()) {
-        if (c.open && (await c.open(path, { background: o.background }))) return null;
+        if (c.open && (await c.open(path, { background: o.background, line: o.line }))) return null;
       }
     }
     if (!ed) {
@@ -1011,14 +1011,20 @@ export class Editors {
     return ed;
   }
 
+  /** Tabs backed by a file that are not code editors (SQL scripts). */
+  private fileTabs() {
+    return this.wb.tabs.tabs.filter((t) => t.file && t.file.path());
+  }
+
   async saveAll() {
-    await Promise.all([...this.map.values()].map((e) => e.flush()));
+    await Promise.all([...[...this.map.values()].map((e) => e.flush()), ...this.fileTabs().map((t) => t.file!.flush())]);
   }
 
   onFsChange(paths: string[]) {
     for (const p of paths) {
       const ed = this.get(p);
       if (ed) ed.reload();
+      for (const t of this.fileTabs()) if (P.same(t.file!.path(), p)) t.file!.reload();
     }
   }
 
@@ -1033,10 +1039,18 @@ export class Editors {
         await this.openFile(np, { line });
       }
     }
+    for (const t of this.fileTabs()) {
+      const p = t.file!.path();
+      if (P.inside(oldPath, p)) {
+        await t.file!.flush();
+        t.file!.moved(newPath + P.norm(p).slice(P.norm(oldPath).length));
+      }
+    }
   }
 
   closeDeleted(paths: string[]) {
     for (const ed of [...this.map.values()]) if (paths.some((p) => P.inside(p, ed.path))) this.wb.tabs.close(ed.tab);
+    for (const t of this.fileTabs()) if (paths.some((p) => P.inside(p, t.file!.path()))) this.wb.tabs.close(t);
   }
 
   reattachLsp(lang: LspLang) {

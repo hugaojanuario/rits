@@ -13,6 +13,8 @@ use tokio::sync::Mutex;
 
 /// Hard cap on rows sent to the UI for a single result set.
 pub const MAX_ROWS: usize = 50_000;
+/// Largest result the console asks for with "Buscar mais".
+pub const MAX_ROWS_CAP: usize = 1_000_000;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]

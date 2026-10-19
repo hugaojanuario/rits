@@ -48,7 +48,7 @@ export const LAZY_PLUGINS: LazyPlugin[] = [
 export interface EditorContribution {
   id: string;
   /** Opens the file itself instead of the text editor (e.g. notebooks). Return true when handled. */
-  open?(path: string, opts: { background?: boolean }): Promise<boolean> | boolean;
+  open?(path: string, opts: { background?: boolean; line?: number }): Promise<boolean> | boolean;
   /** CodeMirror extensions for a file (e.g. Jinja highlighting in dbt models). */
   extensions?(path: string): Extension[];
   /** Go to definition at an offset; return true when handled (before the language server). */

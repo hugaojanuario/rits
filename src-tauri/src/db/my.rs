@@ -1,4 +1,4 @@
-use super::{err_chain, ColumnInfo, CompletionTable, DbObject, DiagramInfo, DiagramTable, ForeignKey, IndexInfo, QueryResult, ServerInfo, MAX_ROWS};
+use super::{err_chain, ColumnInfo, CompletionTable, DbObject, DiagramInfo, DiagramTable, ForeignKey, IndexInfo, QueryResult, ServerInfo};
 use crate::store::ConnConfig;
 use mysql_async::prelude::*;
 use mysql_async::{Conn, OptsBuilder, Row, SslOpts, Value};
@@ -88,7 +88,7 @@ impl MyConn {
         self.id
     }
 
-    pub async fn execute(&self, sql: &str) -> Result<Vec<QueryResult>, String> {
+    pub async fn execute(&self, sql: &str, max_rows: usize) -> Result<Vec<QueryResult>, String> {
         let mut conn = self.conn.lock().await;
         let start = Instant::now();
         let mut result = conn.query_iter(sql).await.map_err(|e| fmt_err(&e))?;
@@ -107,7 +107,7 @@ impl MyConn {
                         use futures_util::StreamExt;
                         while let Some(row) = st.next().await {
                             let row = row.map_err(|e| fmt_err(&e))?;
-                            if qr.rows.len() >= MAX_ROWS {
+                            if qr.rows.len() >= max_rows {
                                 qr.truncated = true;
                                 continue;
                             }

@@ -237,13 +237,31 @@ async fn execute(
     db: String,
     channel: String,
     sql: String,
+    max_rows: Option<usize>,
 ) -> Result<Vec<QueryResult>, String> {
+    // "Buscar mais" asks for a larger limit; a hard cap keeps the window responsive.
+    let max_rows = max_rows.unwrap_or(db::MAX_ROWS).clamp(1, db::MAX_ROWS_CAP);
     let s = session(&app, &st, &conn_id, &db, &channel).await?;
     let mut s = s.lock().await;
     match &mut *s {
-        Session::Pg(c) => c.execute(&sql).await,
-        Session::My(c) => c.execute(&sql).await,
-        Session::Ext(c) => c.execute(&sql).await,
+        Session::Pg(c) => c.execute(&sql, max_rows).await,
+        Session::My(c) => c.execute(&sql, max_rows).await,
+        Session::Ext(c) => c.execute(&sql, max_rows).await,
+    }
+}
+
+/// Manual transactions of the drivers on demand (SQL Server, Oracle, Firebird, SQLite, DuckDB).
+/// PostgreSQL and MySQL use BEGIN / SET autocommit sent as SQL by the console.
+#[tauri::command]
+async fn tx_control(app: AppHandle, st: State<'_, Sessions>, conn_id: String, db: String, channel: String, action: String) -> Result<(), String> {
+    if !matches!(action.as_str(), "manual" | "auto" | "commit" | "rollback") {
+        return Err(format!("ação de transação inválida: {action}"));
+    }
+    let s = session(&app, &st, &conn_id, &db, &channel).await?;
+    let mut s = s.lock().await;
+    match &mut *s {
+        Session::Ext(c) => c.tx(&action).await,
+        _ => Err("Este banco controla a transação por SQL.".into()),
     }
 }
 
@@ -336,6 +354,7 @@ pub fn run() {
             get_ddl,
             completion_info,
             execute,
+            tx_control,
             cancel_query,
             close_channel,
             detect_tools,

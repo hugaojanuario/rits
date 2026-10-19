@@ -20,6 +20,8 @@ export interface ProjectSettings {
   layout?: Record<string, unknown>;
   goFmtOnSave?: boolean;
   dbConsoles?: import("../console").ConsoleState[];
+  /** Connection, database and schema of each SQL script (key: lowercase path). */
+  sqlScripts?: Record<string, { connId: string; db: string; schema: string }>;
   /** Airflow plugin: instance the project deploys to and how DAG files reach it. */
   airflow?: AirflowProjectLink;
   /** dbt plugin: project folder, runtime, profile and target. */

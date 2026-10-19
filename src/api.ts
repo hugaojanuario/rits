@@ -155,8 +155,12 @@ export const api = {
   ddl: (connId: string, db: string, schema: string, name: string, kind: string) =>
     invoke<string>("get_ddl", { connId, db, schema, name, kind }),
   completion: (connId: string, db: string) => invoke<CompletionTable[]>("completion_info", { connId, db }),
-  execute: (connId: string, db: string, channel: string, sql: string) =>
-    invoke<QueryResult[]>("execute", { connId, db, channel, sql }),
+  /** `maxRows`: row limit of each result (default 50 000; "Buscar mais" asks for more). */
+  execute: (connId: string, db: string, channel: string, sql: string, maxRows?: number) =>
+    invoke<QueryResult[]>("execute", { connId, db, channel, sql, maxRows }),
+  /** Manual transactions of the on-demand drivers (SQL Server, Oracle, Firebird, SQLite, DuckDB). */
+  txControl: (connId: string, db: string, channel: string, action: "manual" | "auto" | "commit" | "rollback") =>
+    invoke<void>("tx_control", { connId, db, channel, action }),
   cancel: (connId: string, db: string, channel: string) => invoke<void>("cancel_query", { connId, db, channel }),
   closeChannel: (connId: string, db: string, channel: string) =>
     invoke<void>("close_channel", { connId, db, channel }),

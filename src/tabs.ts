@@ -17,6 +17,8 @@ export interface Tab {
   canClose?: () => Promise<boolean> | boolean;
   onClose?: () => void;
   menu?: () => MenuItem[];
+  /** File-backed tabs that are not code editors (SQL scripts): Editors keeps them in sync with the disk. */
+  file?: { path: () => string; flush: () => Promise<void>; reload: () => void; moved: (path: string) => void };
 }
 
 export class TabManager {

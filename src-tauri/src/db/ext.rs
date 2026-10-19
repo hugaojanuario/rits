@@ -353,8 +353,12 @@ impl ExtConn {
     pub async fn ddl(&mut self, schema: &str, name: &str, kind: &str) -> Result<String, String> {
         self.call("ddl", json!({ "schema": schema, "name": name, "kind": kind })).await
     }
-    pub async fn execute(&mut self, sql: &str) -> Result<Vec<QueryResult>, String> {
-        self.call("execute", json!({ "sql": sql })).await
+    pub async fn execute(&mut self, sql: &str, max_rows: usize) -> Result<Vec<QueryResult>, String> {
+        self.call("execute", json!({ "sql": sql, "maxRows": max_rows })).await
+    }
+    /// Console transactions: "manual", "auto", "commit" or "rollback".
+    pub async fn tx(&mut self, action: &str) -> Result<(), String> {
+        self.call::<Value>("tx", json!({ "action": action })).await.map(|_| ())
     }
     pub async fn diagram(&mut self, schema: &str) -> Result<DiagramInfo, String> {
         self.call("diagram", json!({ "schema": schema })).await

@@ -326,6 +326,7 @@ export class ProjectView {
           { label: "Arquivo Go", icon: "goFile", action: () => this.newEntry(dir, "go") },
           { separator: true },
           { label: "Arquivo Markdown", icon: "fileTypes/markdown", action: () => this.newEntry(dir, "md") },
+          { label: "Script SQL", icon: "fileTypes/sql", action: () => this.wb.db.newScript(dir, this.wb.db.explorer.selectedConn()) },
           { label: ".gitignore", icon: "fileTypes/gitignore", action: () => this.createFile(P.join(dir, ".gitignore"), defaultGitignore()) },
           { separator: true },
           ...INFRA_TEMPLATES.map((t) => ({ label: t.label, icon: t.icon, action: () => this.createInfra(t, dir) })),

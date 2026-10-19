@@ -28,9 +28,9 @@ fn cfg(kind: DbKind, port: u16, user: &str, pw: &str, db: &str) -> ConnConfig {
 async fn exec(c: &ConnConfig, sql: &str) {
     let mut s = Session::open(c, &c.default_db()).await.expect("conexão de preparação");
     let r = match &mut s {
-        Session::Pg(x) => x.execute(sql).await.map(|_| ()),
-        Session::My(x) => x.execute(sql).await.map(|_| ()),
-        Session::Ext(x) => x.execute(sql).await.map(|_| ()),
+        Session::Pg(x) => x.execute(sql, rits_lib::db::MAX_ROWS).await.map(|_| ()),
+        Session::My(x) => x.execute(sql, rits_lib::db::MAX_ROWS).await.map(|_| ()),
+        Session::Ext(x) => x.execute(sql, rits_lib::db::MAX_ROWS).await.map(|_| ()),
     };
     r.unwrap_or_else(|e| panic!("{e}\n--- {}", &sql[..sql.len().min(300)]));
 }
@@ -467,7 +467,7 @@ async fn firebird_full_flow() {
     for t in ["SRC_CLIENTES", "SRC_PEDIDOS", "DST_PESSOAS", "DST_PEDIDOS"] {
         let mut s = Session::open(&c, &c.default_db()).await.unwrap();
         if let Session::Ext(x) = &mut s {
-            let _ = x.execute(&format!("DROP TABLE {t}")).await;
+            let _ = x.execute(&format!("DROP TABLE {t}"), rits_lib::db::MAX_ROWS).await;
         }
     }
     fixtures(&c, &FB).await;

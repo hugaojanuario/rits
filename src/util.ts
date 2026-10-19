@@ -75,72 +75,8 @@ export function qualified(kind: DbKind, schema: string, name: string): string {
 }
 
 
-export interface Stmt {
-  from: number;
-  to: number;
-  text: string;
-}
+export { splitSql, type Stmt } from "./sqlscan";
 
-/** Split a SQL script into statements, honouring quotes, comments and $$ bodies. */
-export function splitSql(sql: string, kind: DbKind): Stmt[] {
-  const out: Stmt[] = [];
-  let start = 0;
-  let i = 0;
-  let delimiter = ";";
-  const n = sql.length;
-  const push = (end: number, next: number) => {
-    const raw = sql.slice(start, end);
-    const lead = raw.length - raw.trimStart().length;
-    const text = raw.trim();
-    if (text) out.push({ from: start + lead, to: start + lead + text.length, text });
-    start = next;
-  };
-  while (i < n) {
-    const c = sql[i];
-    const c2 = sql.slice(i, i + 2);
-    if (c2 === "--" || (kind === "mysql" && c === "#")) {
-      const e = sql.indexOf("\n", i);
-      i = e < 0 ? n : e + 1;
-    } else if (c2 === "/*") {
-      const e = sql.indexOf("*/", i + 2);
-      i = e < 0 ? n : e + 2;
-    } else if (c === "'" || c === '"' || c === "`") {
-      let j = i + 1;
-      while (j < n) {
-        if (sql[j] === "\\" && kind === "mysql" && c !== "`") j += 2;
-        else if (sql[j] === c && sql[j + 1] === c) j += 2;
-        else if (sql[j] === c) break;
-        else j++;
-      }
-      i = j + 1;
-    } else if (c === "$" && kind === "postgres") {
-      const m = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i));
-      if (m) {
-        const e = sql.indexOf(m[0], i + m[0].length);
-        i = e < 0 ? n : e + m[0].length;
-      } else i++;
-    } else if (
-      kind === "mysql" &&
-      (i === 0 || sql[i - 1] === "\n") &&
-      /^delimiter\s+/i.test(sql.slice(i, i + 10))
-    ) {
-      const e = sql.indexOf("\n", i);
-      const line = sql.slice(i, e < 0 ? n : e);
-      push(i, e < 0 ? n : e + 1);
-      delimiter = line.trim().split(/\s+/)[1] || ";";
-      i = e < 0 ? n : e + 1;
-    } else if (sql.startsWith(delimiter, i)) {
-      push(i, i + delimiter.length);
-      i += delimiter.length;
-    } else i++;
-  }
-  push(n, n);
-  return out.filter((s) => !/^delimiter\s/i.test(s.text) && stripComments(s.text).trim() !== "");
-}
-
-function stripComments(s: string) {
-  return s.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-}
 
 export function formatDuration(ms: number) {
   if (ms < 1000) return `${ms} ms`;

@@ -45,6 +45,7 @@ const find = (path: string): E[] | null => {
   return cur;
 };
 const exists = (path: string) => {
+  if ((window as any).__written?.has(path)) return true;
   if (path === ROOT || path.startsWith(ROOT + "/.venv")) return true;
   const i = path.lastIndexOf("/");
   return !!find(path.slice(0, i))?.some((e) => e.name === path.slice(i + 1));
@@ -55,6 +56,18 @@ const callbacks: Record<number, (e: unknown) => void> = {};
 const listeners: Record<string, number[]> = {};
 const emit = (event: string, payload: unknown) => (listeners[event] ?? []).forEach((id) => callbacks[id]?.({ event, id, payload }));
 (window as any).__mockEmit = emit;
+// ?db=1: a fake PostgreSQL connection; "execute" records the SQL and fails on "frm" like Postgres (with Posição)
+const written = new Map<string, string>();
+const executed: string[] = [];
+(window as any).__executed = executed;
+(window as any).__written = written;
+const conns = params.has("db")
+  ? [
+      { id: "pg1", name: "Pagila Database", kind: "postgres", host: "localhost", port: 5432, user: "postgres", password: "", database: "pagila", ssl: false, toolsDir: "", color: "", readOnly: false, project: "" },
+      { id: "my1", name: "Loja MySQL", kind: "mysql", host: "localhost", port: 3306, user: "root", password: "", database: "loja", ssl: false, toolsDir: "", color: "", readOnly: false, project: "" },
+      { id: "lt1", name: "Arquivo SQLite", kind: "sqlite", host: "", port: 0, user: "", password: "", database: "/tmp/x.db", ssl: false, toolsDir: "", color: "", readOnly: false, project: "" },
+    ]
+  : [];
 const handlers: Record<string, (a: any) => unknown> = {
   env_info: () => ({ home: HOME, sep: mac ? "/" : "\\", os: mac ? "macos" : "windows", defaultShell: mac ? "/bin/zsh" : "powershell.exe", username: "hugo" }),
   window_reset: () => null,
@@ -69,8 +82,13 @@ const handlers: Record<string, (a: any) => unknown> = {
   save_doc: () => null,
   fs_exists: (a) => exists(a.path),
   fs_list: (a) => (find(a.path) ?? []).map((e) => ({ name: e.name, path: `${a.path}/${e.name}`, isDir: e.isDir, size: 0, ignored: !!e.ignored })),
+  fs_write: (a) => (written.set(a.path, a.text), null),
   fs_read: (a) => ({
-    text: /\.py$/.test(a.path)
+    text: written.has(a.path)
+      ? written.get(a.path)!
+      : /\.sql$/.test(a.path)
+      ? "select * from rental\nselect *\n  from film\n where film_id = 1\n\nselect count(*) frm customer\n"
+      : /\.py$/.test(a.path)
       ? 'import pandas as pd\n\n\ndef carregar(caminho: str) -> pd.DataFrame:\n    """Lê o arquivo de pedidos e normaliza as colunas."""\n    df = pd.read_csv(caminho, sep=";")\n    return df.rename(columns=str.lower)\n\n\nif __name__ == "__main__":\n    print(carregar("output/pedidos.csv").head())\n'
       : "# DominiCart - Orion REG\n\nPipeline de dados de exemplo (mock da IDE).\n",
     binary: false,
@@ -109,7 +127,31 @@ const handlers: Record<string, (a: any) => unknown> = {
   assistant_open: () => ({ port: 1, token: "t", url: "http://127.0.0.1:1/mcp", claudeConfig: "" }),
   assistant_close: () => null,
   assistant_release: () => null,
-  list_connections: () => [],
+  list_connections: () => conns,
+  connect: () => ({ version: "PostgreSQL 17", currentUser: "postgres" }),
+  list_databases: (a) => (a.connId === "my1" ? ["loja"] : ["pagila"]),
+  list_schemas: () => ["public"],
+  completion_info: () => [
+    { schema: "public", table: "rental", columns: ["rental_id", "rental_date"] },
+    { schema: "public", table: "film", columns: ["film_id", "title"] },
+    { schema: "public", table: "customer", columns: ["customer_id"] },
+  ],
+  close_channel: () => null,
+  execute: (a) => {
+    executed.push(a.sql);
+    const i = a.sql.indexOf("frm");
+    if (i >= 0) throw `ERROR: erro de sintaxe em ou próximo a "frm"\nPosição: ${i + 1}`;
+    // "big": 60 000 rows, cut at the requested limit
+    if (/\bbig\b/.test(a.sql)) {
+      const limit = a.maxRows ?? 50000;
+      return [{ columns: ["n"], rows: Array.from({ length: Math.min(60000, limit) }, (_, k) => [String(k + 1)]), affected: null, hasRows: true, truncated: limit < 60000, elapsedMs: 9 }];
+    }
+    return [{ columns: ["n"], rows: [["1"]], affected: null, hasRows: true, truncated: false, elapsedMs: 3 }];
+  },
+  tx_control: (a) => (executed.push("tx:" + a.action), null),
+  list_objects: () => [{ name: "rental", kind: "table", comment: null }],
+  list_columns: () => [{ name: "rental_id", dataType: "int4", nullable: false, default: null, pk: true, comment: null }],
+  list_indexes: () => [],
   run_capture: (a) => {
     const args: string[] = a.args ?? [];
     if (a.program === "git" || args.includes("rev-parse") || args.includes("status")) {

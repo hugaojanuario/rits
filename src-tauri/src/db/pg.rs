@@ -1,4 +1,4 @@
-use super::{err_chain, ColumnInfo, CompletionTable, DbObject, DiagramInfo, DiagramTable, ForeignKey, IndexInfo, QueryResult, ServerInfo, MAX_ROWS};
+use super::{err_chain, ColumnInfo, CompletionTable, DbObject, DiagramInfo, DiagramTable, ForeignKey, IndexInfo, QueryResult, ServerInfo};
 use crate::store::ConnConfig;
 use std::time::{Duration, Instant};
 use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
@@ -65,7 +65,7 @@ impl PgConn {
         Ok(PgConn { client })
     }
 
-    pub async fn execute(&self, sql: &str) -> Result<Vec<QueryResult>, String> {
+    pub async fn execute(&self, sql: &str, max_rows: usize) -> Result<Vec<QueryResult>, String> {
         let start = Instant::now();
         let msgs = self.client.simple_query(sql).await.map_err(|e| fmt_err(&e))?;
         let elapsed = start.elapsed().as_millis() as u64;
@@ -86,7 +86,7 @@ impl PgConn {
                         has_rows: true,
                         ..Default::default()
                     });
-                    if r.rows.len() >= MAX_ROWS {
+                    if r.rows.len() >= max_rows {
                         r.truncated = true;
                         continue;
                     }

@@ -17,18 +17,33 @@ async fn sqlite_via_driver_process() {
     };
     ensure_driver(&cfg.kind).await.expect("venv");
     let mut c = ExtConn::open(&cfg, "main").await.expect("open");
-    c.execute("CREATE TABLE autor(id INTEGER PRIMARY KEY, nome TEXT NOT NULL)").await.unwrap();
-    c.execute("CREATE TABLE livro(id INTEGER PRIMARY KEY, autor_id INTEGER REFERENCES autor(id), titulo TEXT)").await.unwrap();
-    c.execute("INSERT INTO autor(nome) VALUES ('Clarice Lispector')").await.unwrap();
-    let r = c.execute("SELECT nome FROM autor").await.unwrap();
+    c.execute("CREATE TABLE autor(id INTEGER PRIMARY KEY, nome TEXT NOT NULL)", rits_lib::db::MAX_ROWS).await.unwrap();
+    c.execute("CREATE TABLE livro(id INTEGER PRIMARY KEY, autor_id INTEGER REFERENCES autor(id), titulo TEXT)", rits_lib::db::MAX_ROWS).await.unwrap();
+    c.execute("INSERT INTO autor(nome) VALUES ('Clarice Lispector')", rits_lib::db::MAX_ROWS).await.unwrap();
+    let r = c.execute("SELECT nome FROM autor", rits_lib::db::MAX_ROWS).await.unwrap();
     assert_eq!(r[0].rows[0][0].as_deref(), Some("Clarice Lispector"));
     assert!(c.server_info().await.unwrap().version.starts_with("SQLite"));
     let d = c.diagram("main").await.unwrap();
     assert_eq!(d.tables.len(), 2);
     assert_eq!(d.fks.len(), 1);
     assert_eq!(d.fks[0].ref_table, "autor");
-    assert!(c.execute("SELEC 1").await.is_err());
+    assert!(c.execute("SELEC 1", rits_lib::db::MAX_ROWS).await.is_err());
     // the session survives an error
     assert_eq!(c.databases().await.unwrap(), vec!["main".to_string()]);
+    // row limit of the console ("Buscar mais" asks again with a larger one)
+    c.execute("INSERT INTO autor(nome) VALUES ('Machado'), ('Graciliano')", rits_lib::db::MAX_ROWS).await.unwrap();
+    let r = c.execute("SELECT nome FROM autor", 2).await.unwrap();
+    assert!(r[0].truncated && r[0].rows.len() == 2);
+    // manual transaction: rollback undoes, commit keeps
+    c.tx("manual").await.unwrap();
+    c.execute("DELETE FROM autor", rits_lib::db::MAX_ROWS).await.unwrap();
+    c.tx("rollback").await.unwrap();
+    let r = c.execute("SELECT count(*) FROM autor", rits_lib::db::MAX_ROWS).await.unwrap();
+    assert_eq!(r[0].rows[0][0].as_deref(), Some("3"));
+    c.execute("DELETE FROM autor WHERE nome = 'Machado'", rits_lib::db::MAX_ROWS).await.unwrap();
+    c.tx("commit").await.unwrap();
+    c.tx("auto").await.unwrap();
+    let r = c.execute("SELECT count(*) FROM autor", rits_lib::db::MAX_ROWS).await.unwrap();
+    assert_eq!(r[0].rows[0][0].as_deref(), Some("2"));
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -3,14 +3,16 @@
 import type { ConnConfig } from "../api";
 import { openBackupWizard, openRestoreWizard, setTaskStartedHook, taskPanel } from "../backup";
 import { openConnectionDialog, pickDbKind } from "../connDialog";
-import { createConsole, type ConsoleState, type ConsoleTab } from "../console";
+import { createConsole, type ConsoleHooks, type ConsoleState, type ConsoleTab } from "../console";
 import { Explorer } from "../explorer";
 import { icon } from "../icons";
 import { store } from "../state";
 import { createDdlTab, createTableView, type ObjectRef } from "../tableView";
 import { createDiagramTab } from "../diagram";
-import { toast } from "../ui";
+import { promptDialog, toast } from "../ui";
 import { debounce, formatDuration, h } from "../util";
+import { host, P } from "./host";
+import { contribute } from "./plugins";
 import type { Workbench } from "./workbench";
 
 export class DbTools {
@@ -30,6 +32,16 @@ export class DbTools {
       backup: (c, db, schemas, tables) => openBackupWizard(c, db, schemas, tables),
       restore: (c, db) => openRestoreWizard(c, db),
       openDiagram: (c, db, schema, focus) => this.openDiagram(c, db, schema, focus),
+      newScript: (c, db, schema) => this.newScript(this.wb.root, c, db, schema),
+    });
+    // .sql files open as SQL scripts (editor + connection + results); dbt models stay in the code editor
+    contribute({
+      id: "sql-scripts",
+      open: async (path, o) => {
+        if (P.ext(path) !== "sql" || (await this.isDbtFile(path))) return false;
+        this.openScript(path, { background: o.background, line: o.line });
+        return true;
+      },
     });
     wb.register({
       id: "database",
@@ -43,6 +55,7 @@ export class DbTools {
         h("button.icon-btn", { title: "Nova conexão", onclick: (e: MouseEvent) => this.newConnection(e.currentTarget as HTMLElement) }, icon("general/add")),
         h("button.icon-btn", { title: "Atualizar (F5)", onclick: () => this.explorer.refreshSelected() }, icon("general/refresh")),
         h("button.icon-btn", { title: "Abrir console (Ctrl+Shift+L)", onclick: () => this.explorer.consoleForSelected() }, icon("console")),
+        h("button.icon-btn", { title: "Novo script SQL", onclick: () => this.newScript(this.wb.root, this.explorer.selectedConn()) }, icon("fileTypes/sql")),
         h("button.icon-btn", { title: "Backup", onclick: () => this.backup() }, icon("backup")),
         h("button.icon-btn", { title: "Restaurar", onclick: () => this.restore() }, icon("restore")),
         h("button.icon-btn", { title: "Recolher tudo", onclick: () => this.explorer.collapseAll() }, icon("general/collapseAll")),
@@ -83,15 +96,102 @@ export class DbTools {
       toast(String(e), "error");
     }
     for (const s of this.wb.settings.dbConsoles ?? []) {
-      const c = store.conn(s.connId);
-      if (c) this.wb.tabs.open(createConsole(c, s, this.persist), true);
+      const c = store.conn(s.connId) ?? null;
+      if (s.file) {
+        if (await host.exists(s.file)) this.wb.tabs.open(createConsole(c, { ...s, text: "" }, this.hooks), true);
+      } else if (c) this.wb.tabs.open(createConsole(c, s, this.hooks), true);
     }
   }
 
   private persist = debounce(() => {
-    this.wb.settings.dbConsoles = this.wb.tabs.tabs.filter((t) => (t as ConsoleTab).kind === "console").map((t) => ({ ...(t as ConsoleTab).state }));
+    // scripts keep their text in the file
+    this.wb.settings.dbConsoles = this.consoles().map((t) => ({ ...t.state, text: t.state.file ? "" : t.state.text }));
     this.wb.saveSettings();
   }, 500);
+
+  private hooks: ConsoleHooks = {
+    onPersist: () => this.persist(),
+    openTable: (c, ref) => this.openObject(c, ref),
+    openScript: (path, conn, db, schema) => {
+      if (conn && !this.wb.settings.sqlScripts?.[path.toLowerCase()]) this.bindScript(path, conn.id, db, schema);
+      this.openScript(path);
+    },
+    scriptBound: (s, oldFile) => {
+      if (oldFile) delete this.wb.settings.sqlScripts?.[P.norm(oldFile).toLowerCase()];
+      if (s.file) this.bindScript(s.file, s.connId, s.db, s.schema);
+    },
+  };
+
+  private consoles() {
+    return this.wb.tabs.tabs.filter((t) => (t as ConsoleTab).kind === "console") as ConsoleTab[];
+  }
+
+  private bindScript(path: string, connId: string, db: string, schema: string) {
+    (this.wb.settings.sqlScripts ??= {})[P.norm(path).toLowerCase()] = { connId, db, schema };
+    this.wb.saveSettings();
+  }
+
+  /** dbt models and macros are Jinja SQL: they stay in the code editor with the dbt plugin. */
+  private async isDbtFile(path: string) {
+    const dir = this.wb.settings.dbt?.projectDir;
+    if (dir && P.inside(dir, path)) return true;
+    try {
+      const f = await host.read(path);
+      return /\{\{|\{%/.test(f.text);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Opens a .sql file as a SQL script tab, with the connection last used for it. */
+  openScript(path: string, o: { background?: boolean; line?: number } = {}) {
+    path = P.norm(path);
+    let t = this.consoles().find((x) => x.state.file && P.same(x.state.file, path));
+    if (!t) {
+      const b = this.wb.settings.sqlScripts?.[path.toLowerCase()];
+      const c = (b && store.conn(b.connId)) || null;
+      t = createConsole(c, { file: path, db: c ? b!.db : undefined, schema: c ? b!.schema : undefined }, this.hooks);
+      const tab = t;
+      tab.menu = () => [
+        { label: "Revelar no Projeto", icon: "general/locate", action: () => this.wb.projectView.reveal(path) },
+        { label: "Copiar caminho", icon: "general/copy", action: () => navigator.clipboard.writeText(P.win(tab.state.file ?? path)) },
+        {
+          label: "Abrir como texto",
+          action: async () => {
+            await tab.file?.flush();
+            if (await this.wb.tabs.close(tab)) this.wb.editors.openFile(tab.state.file ?? path, { text: true });
+          },
+        },
+      ];
+      this.wb.tabs.open(t, o.background);
+      this.persist();
+    } else if (!o.background) this.wb.tabs.activate(t);
+    if (o.line) {
+      const v = t.editor.view;
+      const line = v.state.doc.line(Math.min(o.line, v.state.doc.lines));
+      v.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+    }
+  }
+
+  /** Creates a .sql file (asks the name) bound to a connection, and opens it. */
+  async newScript(dir: string, c?: ConnConfig | null, db?: string, schema?: string) {
+    let name = (await promptDialog("Novo script SQL", "Nome do arquivo", c ? `${c.name.replace(/[^\w.-]+/g, "_")}.sql` : "consulta.sql"))?.trim();
+    if (!name) return;
+    if (!/\.sql$/i.test(name)) name += ".sql";
+    const path = P.join(dir, name);
+    if (await host.exists(path)) return toast(`${P.base(path)} já existe`, "error");
+    const conn = c ?? (store.connections.length === 1 ? store.connections[0] : null);
+    try {
+      if (!(await host.exists(P.dir(path)))) await host.create(P.dir(path), true);
+      await host.write(path, "");
+    } catch (e) {
+      return toast(String(e), "error");
+    }
+    if (conn) this.bindScript(path, conn.id, db ?? conn.database, schema ?? "");
+    this.openScript(path);
+    this.wb.projectView.reveal(path).catch(() => {});
+    if (this.wb.git.isRepo) this.wb.git.askAdd(path);
+  }
 
   /** Picks the database type in a small popup (at the + button), then opens the connection dialog. */
   newConnection(anchor?: HTMLElement) {
@@ -105,14 +205,14 @@ export class DbTools {
   }
 
   openConsole(c: ConnConfig, init: Partial<ConsoleState>, run = false) {
-    const t = createConsole(c, init, this.persist);
+    const t = createConsole(c, init, this.hooks);
     this.wb.tabs.open(t);
     this.persist();
     if (run && init.text) setTimeout(() => t.insertText("", true));
   }
 
   private consoleWithText(c: ConnConfig, db: string, text: string) {
-    const existing = this.wb.tabs.tabs.find((t) => (t as ConsoleTab).kind === "console" && (t as ConsoleTab).state.connId === c.id && (t as ConsoleTab).state.db === db) as ConsoleTab | undefined;
+    const existing = this.consoles().find((t) => !t.state.file && t.state.connId === c.id && t.state.db === db);
     if (existing) {
       this.wb.tabs.activate(existing);
       existing.insertText(text);
@@ -126,7 +226,7 @@ export class DbTools {
 
   private ctx(): { conn?: ConnConfig; db: string } {
     const t = this.wb.tabs.active as ConsoleTab | null;
-    if (t && t.kind === "console") return { conn: store.conn(t.state.connId), db: t.state.db };
+    if (t && t.kind === "console" && t.state.connId) return { conn: store.conn(t.state.connId), db: t.state.db };
     const c = this.explorer.selectedConn();
     return { conn: c, db: c?.database ?? "" };
   }

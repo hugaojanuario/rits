@@ -105,12 +105,35 @@ class SqlDriver:
         except Exception:
             pass
 
+    # Manual transactions of the console: statements are not committed until "commit".
+    manual = False
+
+    def autocommit(self, on):
+        self.conn.autocommit = on
+
+    def tx(self, action):
+        if action in ("manual", "auto"):
+            if action == "auto" and self.manual:
+                self.conn.rollback()
+            self.manual = action == "manual"
+            self.autocommit(not self.manual)
+        else:
+            self.conn.commit() if action == "commit" else self.conn.rollback()
+            self.after_tx()
+        return True
+
+    def after_tx(self):
+        pass
+
     def prepare(self, sql):
         return sql
 
+    def exec_cursor(self):
+        return self.conn.cursor()
+
     def execute(self, sql):
         t0 = time.time()
-        cur = self.conn.cursor()
+        cur = self.exec_cursor()
         try:
             cur.execute(self.prepare(sql))
             results = []
@@ -129,17 +152,21 @@ class SqlDriver:
                         break
                 except Exception:
                     break
-            self.commit()
+            if not self.manual:
+                self.commit()
             return results
         except Exception:
-            try:
-                self.conn.rollback()
-            except Exception:
-                pass
+            # in a manual transaction the user decides (commit/rollback); the failed statement is undone by the database
+            if not self.manual:
+                try:
+                    self.conn.rollback()
+                except Exception:
+                    pass
             raise
         finally:
             try:
-                cur.close()
+                if cur is not self.conn:
+                    cur.close()
             except Exception:
                 pass
 
@@ -529,6 +556,9 @@ class Firebird(SqlDriver):
 
     has_schemas = False
 
+    def autocommit(self, on):
+        self.conn.set_autocommit(on)
+
     def audit_begin(self, consistency):
         import firebirdsql
 
@@ -667,6 +697,10 @@ class Sqlite(SqlDriver):
         self.conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self.sqlite3 = sqlite3
 
+    def autocommit(self, on):
+        # None = autocommit; "DEFERRED" = sqlite3 opens a transaction before changes
+        self.conn.isolation_level = None if on else "DEFERRED"
+
     def execute(self, sql):
         try:
             return super().execute(sql)
@@ -733,6 +767,23 @@ class DuckDb(SqlDriver):
 
     def commit(self):
         pass
+
+    def autocommit(self, on):
+        if on:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+        else:
+            self.conn.execute("BEGIN TRANSACTION")
+
+    def exec_cursor(self):
+        # a DuckDB cursor is a separate connection, outside the console transaction
+        return self.conn
+
+    def after_tx(self):
+        if self.manual:
+            self.conn.execute("BEGIN TRANSACTION")
 
     def server_info(self):
         return {"version": "DuckDB " + self.rows("SELECT version()")[0][0], "currentUser": ""}
@@ -1183,7 +1234,13 @@ def main():
             elif drv is None:
                 raise Exception("conexão não aberta")
             elif op == "execute":
+                global MAX_ROWS
+                MAX_ROWS = int(req.get("maxRows") or 50000)
                 res = drv.execute(req["sql"])
+            elif op == "tx":
+                if not hasattr(drv, "tx") or isinstance(drv, ClickHouse):
+                    raise Exception("Este banco não tem transações manuais no console.")
+                res = drv.tx(req.get("action") or "")
             elif op in ("objects", "completion", "diagram"):
                 res = getattr(drv, op)(req.get("schema") or "")
             elif op in ("columns", "indexes"):

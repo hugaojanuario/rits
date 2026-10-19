@@ -1,6 +1,6 @@
 // CodeMirror setup shared by consoles and DDL viewers.
 import { EditorView, keymap, Decoration, ViewPlugin, type DecorationSet, type ViewUpdate, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, rectangularSelection, crosshairCursor, highlightActiveLine } from "@codemirror/view";
-import { EditorState, Compartment, RangeSetBuilder, type Extension } from "@codemirror/state";
+import { EditorState, Compartment, RangeSetBuilder, StateEffect, type Extension } from "@codemirror/state";
 import { sql, PostgreSQL, MySQL, MSSQL, PLSQL, SQLite, StandardSQL, type SQLDialect, type SQLNamespace } from "@codemirror/lang-sql";
 import { javascript } from "@codemirror/lang-javascript";
 import { dialect } from "./dialects";
@@ -10,7 +10,8 @@ import { defaultKeymap, history, historyKeymap, indentWithTab, toggleComment } f
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 import type { CompletionTable, DbKind } from "./api";
-import { splitSql } from "./util";
+import { scanSql, statementAt, unknownTables } from "./sqlscan";
+import { linter, type Diagnostic } from "@codemirror/lint";
 import { completionTabKeymap } from "./ide/completion";
 
 const highlight = HighlightStyle.define([
@@ -74,15 +75,7 @@ function currentStatement(kind: () => DbKind): Extension {
   );
 }
 
-export function statementAt(text: string, pos: number, kind: DbKind) {
-  const stmts = splitSql(text, kind);
-  let best = stmts.find((s) => pos >= s.from && pos <= s.to);
-  if (!best) {
-    // Caret after a statement's ';' or on a blank line right below: take the previous one.
-    best = [...stmts].reverse().find((s) => s.to <= pos && !/\n\s*\n/.test(text.slice(s.to, pos)));
-  }
-  return best ?? null;
-}
+export { statementAt };
 
 export function buildNamespace(tables: CompletionTable[], defaultSchema: string): SQLNamespace {
   const ns: Record<string, Record<string, string[]>> = {};
@@ -98,6 +91,8 @@ export interface EditorHandle {
   view: EditorView;
   setLanguage: (kind: DbKind, tables: CompletionTable[], defaultSchema: string) => void;
   setReadOnly: (ro: boolean) => void;
+  /** Marks where the database reported an error (cleared on the next edit); null clears it. */
+  setExecError: (e: { from: number; to: number; message: string } | null) => void;
 }
 
 export function createEditor(
@@ -106,10 +101,14 @@ export function createEditor(
   kind: DbKind,
   extraKeys: { key: string; run: () => boolean; preventDefault?: boolean }[] = [],
   onChange?: (text: string) => void,
+  extra: Extension[] = [],
 ): EditorHandle {
   const lang = new Compartment();
   const ro = new Compartment();
   let curKind = kind;
+  let execErrors: Diagnostic[] = [];
+  /** Tables of the connected database (from the completion metadata) for the "unknown table" warning. */
+  let known: { tables: CompletionTable[]; def: string } = { tables: [], def: "" };
   const CM_DIALECT: Record<string, SQLDialect> = { pg: PostgreSQL, mysql: MySQL, clickhouse: MySQL, sqlserver: MSSQL, oracle: PLSQL, sqlite: SQLite, duckdb: PostgreSQL, firebird: StandardSQL };
   // MongoDB consoles take mongosh-style JavaScript.
   const langExt = (k: DbKind, ns: SQLNamespace = {}, def?: string): Extension =>
@@ -151,8 +150,12 @@ export function createEditor(
         syntaxHighlighting(highlight),
         baseTheme,
         currentStatement(() => curKind),
+        sqlLint(() => curKind, () => execErrors, () => known),
+        ...extra,
         EditorView.updateListener.of((u) => {
-          if (u.docChanged) onChange?.(u.state.doc.toString());
+          if (!u.docChanged) return;
+          execErrors = [];
+          onChange?.(u.state.doc.toString());
         }),
       ],
     }),
@@ -161,12 +164,33 @@ export function createEditor(
     view,
     setLanguage(k, tables, def) {
       curKind = k;
-      view.dispatch({ effects: lang.reconfigure(langExt(k, buildNamespace(tables, def), def)) });
+      known = { tables, def };
+      view.dispatch({ effects: [lang.reconfigure(langExt(k, buildNamespace(tables, def), def)), relint.of(null)] });
     },
     setReadOnly(r) {
       view.dispatch({ effects: ro.reconfigure(EditorState.readOnly.of(r)) });
     },
+    setExecError(e) {
+      const len = view.state.doc.length;
+      execErrors = e ? [{ from: Math.min(e.from, len), to: Math.min(Math.max(e.to, e.from + 1), len), severity: "error", message: e.message, source: "Banco" }] : [];
+      view.dispatch({ effects: relint.of(null) });
+    },
   };
+}
+
+const relint = StateEffect.define<null>();
+
+/** Structural problems of the script (missing ";", unclosed quotes and parentheses) plus the last database error. */
+function sqlLint(kind: () => DbKind, exec: () => Diagnostic[], known: () => { tables: CompletionTable[]; def: string }): Extension {
+  return linter(
+    (view) => {
+      const text = view.state.doc.toString();
+      const k = known();
+      const found: Diagnostic[] = [...scanSql(text, kind()).problems, ...unknownTables(text, kind(), k.tables, k.def)].map((p) => ({ ...p, source: "SQL" }));
+      return [...found, ...exec()];
+    },
+    { delay: 350, needsRefresh: (u) => u.transactions.some((tr) => tr.effects.some((e) => e.is(relint))) },
+  );
 }
 
 const KW_BREAK = [

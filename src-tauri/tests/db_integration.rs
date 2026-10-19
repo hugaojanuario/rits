@@ -51,17 +51,17 @@ async fn postgres_roundtrip() {
     let comp = s.completion().await.unwrap();
     assert!(comp.iter().any(|t| t.table == "pedidos" && t.columns.contains(&"total".into())));
     // multi statement, mixed results
-    let r = s.execute("SELECT 1 AS a, NULL AS b; UPDATE vendas.pedidos SET status = status WHERE id < 4; SELECT count(*) FROM vendas.clientes").await.unwrap();
+    let r = s.execute("SELECT 1 AS a, NULL AS b; UPDATE vendas.pedidos SET status = status WHERE id < 4; SELECT count(*) FROM vendas.clientes", rits_lib::db::MAX_ROWS).await.unwrap();
     assert_eq!(r.len(), 3);
     assert_eq!(r[0].rows[0], vec![Some("1".into()), None]);
     assert_eq!(r[1].affected, Some(3));
     assert_eq!(r[2].rows[0][0].as_deref(), Some("1500"));
     // empty result keeps columns
-    let r = s.execute("SELECT id, nome FROM vendas.clientes WHERE false").await.unwrap();
+    let r = s.execute("SELECT id, nome FROM vendas.clientes WHERE false", rits_lib::db::MAX_ROWS).await.unwrap();
     assert_eq!(r[0].columns, vec!["id", "nome"]);
     assert!(r[0].has_rows);
     // error formatting
-    let e = s.execute("SELECT * FROM nao_existe").await.unwrap_err();
+    let e = s.execute("SELECT * FROM nao_existe", rits_lib::db::MAX_ROWS).await.unwrap_err();
     println!("err: {e}");
     assert!(e.contains("nao_existe"));
 }
@@ -83,13 +83,13 @@ async fn mysql_roundtrip() {
     assert!(s.ddl("loja", "reajuste", "procedure").await.unwrap().contains("PROCEDURE"));
     assert!(s.indexes("loja", "produtos").await.unwrap()[0].primary);
     assert!(!s.completion("loja").await.unwrap().is_empty());
-    let r = s.execute("SELECT nome, preco, NULL n FROM produtos ORDER BY id; UPDATE produtos SET preco = preco WHERE id = 1; SELECT 'ç' AS x").await.unwrap();
+    let r = s.execute("SELECT nome, preco, NULL n FROM produtos ORDER BY id; UPDATE produtos SET preco = preco WHERE id = 1; SELECT 'ç' AS x", rits_lib::db::MAX_ROWS).await.unwrap();
     assert_eq!(r.len(), 3, "{r:?}");
     assert_eq!(r[0].rows[0][0].as_deref(), Some("Café"));
     assert_eq!(r[0].rows[0][2], None);
     assert!(r[1].affected.is_some());
     assert_eq!(r[2].rows[0][0].as_deref(), Some("ç"));
-    let e = s.execute("SELEC 1").await.unwrap_err();
+    let e = s.execute("SELEC 1", rits_lib::db::MAX_ROWS).await.unwrap_err();
     println!("err: {e}");
 }
 
@@ -102,7 +102,7 @@ async fn pg_cancel() {
     let h = tokio::spawn(async move {
         let s = s.lock().await;
         let Session::Pg(p) = &*s else { panic!() };
-        p.execute("SELECT pg_sleep(10)").await
+        p.execute("SELECT pg_sleep(10)", rits_lib::db::MAX_ROWS).await
     });
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     st.cancel("t", "loja", "console").await.unwrap();
