@@ -1,17 +1,21 @@
-O Rits reúne código Python e Go, bancos de dados, orquestração e infraestrutura em uma IDE leve. A versão 0.7.0 traz scripts SQL e um console SQL bem mais esperto:
+O Rits reúne código Python e Go, bancos de dados, orquestração e infraestrutura em uma IDE leve. A versão 0.8.0 chega ao **Linux**:
 
-- **Executar sem `;`**: Ctrl+Enter executa só a instrução do cursor, mesmo quando as consultas não terminam em `;`. "Executar tudo" separa do mesmo jeito, e `GO` (SQL Server), `/` (Oracle), `DELIMITER` (MySQL) e `SET TERM` (Firebird) são respeitados.
-- **Marcações no editor**: o `;` que falta, aspas e parênteses sem fechamento e o ponto exato do erro devolvido pelo banco aparecem sublinhados em vermelho; tabelas que o banco não tem, em amarelo.
-- **Scripts SQL**: arquivos `.sql` do projeto abrem com conexão, database e schema próprios (lembrados por arquivo), salvamento automático e o painel de resultados. Crie em Novo › Script SQL, na árvore do projeto ou no menu de uma conexão.
-- **Parâmetros**: `:id`, `?`, `${var}` e `$1` são perguntados antes de executar.
-- **Erro no meio do script**: escolha parar, ignorar ou ignorar todos os erros.
-- **Buscar mais**: resultados cortados em 50 mil linhas ganham "Buscar mais" e "Buscar tudo" (até 1 milhão).
-- **Ctrl/⌘+clique** numa tabela do SQL abre os dados dela.
-- **Transação manual** também no SQL Server, Oracle, Firebird, SQLite e DuckDB.
+- **Linux x64**: AppImage para qualquer distribuição e pacote `.deb` para Debian/Ubuntu. Requer o WebKitGTK 4.1 (Ubuntu 22.04+, Debian 12+, Fedora 38+).
+- **Segredos no Linux**: senhas e tokens dos plugins (Airflow, Jupyter, dbt) ficam no Secret Service (GNOME Keyring ou KWallet).
+- **Ferramentas encontradas no Linux**: o PATH do shell de login é lido ao abrir (pyenv, Go, `~/.local/bin`…), além de linuxbrew e `/snap/bin`; `pg_dump`, `pg_restore` e `psql` são procurados também em `/usr/lib/postgresql/*/bin` e `/usr/pgsql-*/bin`.
+- No Linux, a atualização é manual (baixe a versão nova) e o ditado do Assistente IA não está disponível.
 
-Quem está na 0.6.x vê o botão **Atualizar para v0.7.0** na barra de título.
+Quem está na 0.7.x no Windows ou no Mac vê o botão **Atualizar para v0.8.0** na barra de título.
 
-Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64** ou `Rits-macos-arm64.dmg` para **Mac Apple Silicon**. O arquivo `SHA256SUMS.txt` contém os hashes dos dois instaladores.
+Baixe `Rits-windows-x64-setup.exe` para **Windows 11 x64**, `Rits-macos-arm64.dmg` para **Mac Apple Silicon**, `Rits-linux-x64.AppImage` ou `Rits-linux-x64.deb` para **Linux x64**. O arquivo `SHA256SUMS.txt` contém os hashes dos instaladores.
+
+No Linux:
+
+```bash
+chmod +x Rits-linux-x64.AppImage && ./Rits-linux-x64.AppImage
+# ou, no Debian/Ubuntu:
+sudo apt install ./Rits-linux-x64.deb
+```
 
 No Mac, instale com uma linha no Terminal (baixa, instala em Aplicativos e libera o app):
 
