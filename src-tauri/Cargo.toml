@@ -41,7 +41,7 @@ unicode-normalization = "0.1"
 
 # Transparent windows (Liquid Glass / vibrancy) need the private API on macOS only.
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
 # AI assistant dictation: Speech framework + the microphone through AVAudioEngine.
 objc2 = "0.6"
 block2 = "0.6"
