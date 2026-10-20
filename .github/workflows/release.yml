@@ -59,6 +59,11 @@ jobs:
             platform: macos
             target: aarch64-apple-darwin
             bundle: dmg
+          # 22.04: the oldest glibc still supported, so the AppImage and the .deb run on older distributions too.
+          - os: ubuntu-22.04
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+            bundle: deb,appimage
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -75,6 +80,11 @@ jobs:
         with:
           workspaces: src-tauri -> target
           key: ${{ matrix.target }}
+      - name: Dependências do Linux (WebKitGTK, D-Bus)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libdbus-1-dev libxdo-dev
       - run: npm ci
       - run: npm run build
       - name: Validar comandos do Windows
@@ -113,14 +123,16 @@ jobs:
           pattern: installer-*
           merge-multiple: true
           path: release-assets
-      - name: Publicar somente com os dois instaladores
+      - name: Publicar somente com todos os instaladores
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
           test -s release-assets/Rits-windows-x64-setup.exe
           test -s release-assets/Rits-macos-arm64.dmg
-          (cd release-assets && sha256sum Rits-windows-x64-setup.exe Rits-macos-arm64.dmg > SHA256SUMS.txt)
+          test -s release-assets/Rits-linux-x64.AppImage
+          test -s release-assets/Rits-linux-x64.deb
+          (cd release-assets && sha256sum Rits-windows-x64-setup.exe Rits-macos-arm64.dmg Rits-linux-x64.AppImage Rits-linux-x64.deb > SHA256SUMS.txt)
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > /tmp/rits-release-draft; then
             if [ "$(cat /tmp/rits-release-draft)" = false ]; then
               echo "A release já está publicada."

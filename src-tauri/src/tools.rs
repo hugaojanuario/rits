@@ -103,7 +103,7 @@ fn candidate_dirs(kind: &DbKind, custom: &str) -> Vec<PathBuf> {
     dirs
 }
 
-/// Homebrew kegs (often keg-only, so not on PATH), Postgres.app and the official installers.
+/// Homebrew kegs (often keg-only, so not on PATH), Postgres.app, the official installers and the Linux packages.
 fn unix_candidate_dirs(kind: &DbKind, dirs: &mut Vec<PathBuf>) {
     let prefixes: &[&str] = match kind {
         DbKind::Postgres => &["postgresql", "libpq"],
@@ -131,6 +131,14 @@ fn unix_candidate_dirs(kind: &DbKind, dirs: &mut Vec<PathBuf>) {
             dirs.push(PathBuf::from("/Library/PostgreSQL/bin"));
             let mut found = vec![];
             collect_bins(Path::new("/Library/PostgreSQL"), 1, &mut found);
+            found.sort_by(|a, b| natural_cmp(&b.to_string_lossy(), &a.to_string_lossy()));
+            dirs.extend(found);
+            // Debian/Ubuntu (/usr/lib/postgresql/17/bin) and the PGDG RPMs (/usr/pgsql-17/bin).
+            let mut found = vec![];
+            collect_bins(Path::new("/usr/lib/postgresql"), 1, &mut found);
+            if let Ok(rd) = std::fs::read_dir("/usr") {
+                found.extend(rd.flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("pgsql-"))).map(|p| p.join("bin")));
+            }
             found.sort_by(|a, b| natural_cmp(&b.to_string_lossy(), &a.to_string_lossy()));
             dirs.extend(found);
         }

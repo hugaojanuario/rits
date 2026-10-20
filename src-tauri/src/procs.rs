@@ -82,12 +82,13 @@ pub fn hidden(c: &mut Command) {
     let _ = c;
 }
 
-/// GUI apps on macOS start with a minimal PATH (/usr/bin:/bin:...), without Homebrew, pyenv, Go etc.
-/// Adopts the PATH of the user's login shell once at startup, like a terminal would see it.
-#[cfg(target_os = "macos")]
+/// GUI apps on macOS (and Linux apps started from the desktop menu) get a minimal PATH, without
+/// Homebrew, pyenv, Go etc. Adopts the PATH of the user's login shell once at startup, like a terminal would see it.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn adopt_login_shell_path() {
     const MARK: &str = "__RITS_PATH__";
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let fallback = if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/bash" };
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| fallback.into());
     let child = std::process::Command::new(&shell)
         .args(["-ilc", &format!("printf '{MARK}%s{MARK}' \"$PATH\"")])
         .stdin(Stdio::null())
@@ -159,7 +160,7 @@ pub fn default_tool_dirs() -> Vec<PathBuf> {
             v.push(home.join(".pyenv").join("shims"));
             v.push(home.join(".cargo").join("bin"));
         }
-        for d in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/go/bin", "/opt/local/bin"] {
+        for d in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/go/bin", "/opt/local/bin", "/home/linuxbrew/.linuxbrew/bin", "/snap/bin"] {
             v.push(PathBuf::from(d));
         }
         v.push(PathBuf::from("/Library/Frameworks/Python.framework/Versions/Current/bin"));

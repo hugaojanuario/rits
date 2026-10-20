@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/hugaojanuario/rits/releases/latest"><img alt="Última versão" src="https://img.shields.io/github/v/release/hugaojanuario/rits?label=vers%C3%A3o&color=A08CFF"></a>
-  <img alt="Plataformas" src="https://img.shields.io/badge/plataformas-Windows%2011%20%7C%20macOS%20Apple%20Silicon-555">
+  <img alt="Plataformas" src="https://img.shields.io/badge/plataformas-Windows%2011%20%7C%20macOS%20Apple%20Silicon%20%7C%20Linux%20x64-555">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB">
   <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-green"></a>
 </p>
@@ -23,6 +23,7 @@
 <p align="center">
   <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe">Baixar Windows x64</a> ·
   <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg">Baixar macOS Apple Silicon</a> ·
+  <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-linux-x64.AppImage">Baixar Linux x64</a> ·
   <a href="https://github.com/hugaojanuario/rits/releases/latest">Releases</a>
 </p>
 
@@ -214,6 +215,16 @@ brew install python go libpq mysql-client
 [Baixe o instalador para Windows x64](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe) e execute. O WebView2 é instalado automaticamente se necessário. A [página da release](https://github.com/hugaojanuario/rits/releases/latest) também traz `SHA256SUMS.txt` para conferir os downloads.
 
 Os plugins também encontram ferramentas nas pastas padrão do npm e WinGet, mesmo quando instaladas depois de abrir a IDE. O Docker Desktop pode estar instalado só para seu usuário ou em Program Files. As ações de infraestrutura funcionam no PowerShell 5.1 e 7, inclusive com nomes de arquivo que contêm espaços e caracteres especiais. O Liquid Glass é exclusivo do macOS; no Windows, use Rits Escuro ou Rits Claro.
+
+### Linux (x64)
+
+Baixe o [AppImage](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-linux-x64.AppImage) (qualquer distribuição: `chmod +x Rits-linux-x64.AppImage` e execute) ou o [pacote .deb](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-linux-x64.deb) para Debian/Ubuntu (`sudo apt install ./Rits-linux-x64.deb`). Requer o WebKitGTK 4.1 (Ubuntu 22.04+, Debian 12+, Fedora 38+). Os segredos ficam no Secret Service (GNOME Keyring ou KWallet). No Linux, as atualizações são manuais: baixe a nova versão. O ditado não está disponível no Linux.
+
+As ferramentas de linguagem e de banco vêm da distribuição:
+
+```bash
+sudo apt install python3 python3-venv golang-go git postgresql-client mysql-client
+```
 
 ## Primeiros passos
 

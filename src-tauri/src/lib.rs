@@ -314,7 +314,7 @@ fn save_doc(app: AppHandle, key: String, value: serde_json::Value) -> Result<(),
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     procs::adopt_login_shell_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

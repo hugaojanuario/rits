@@ -130,12 +130,15 @@ export function onFsChange(cb: (root: string, paths: string[]) => void): Promise
 // ---- platform ----
 export const IS_WIN = /Windows/i.test(navigator.userAgent);
 export const IS_MAC = /Macintosh|Mac OS X/i.test(navigator.userAgent);
+export const IS_LINUX = !IS_WIN && !IS_MAC;
 /** Suffix of native executables ("python.exe" on Windows, "python" elsewhere). */
 export const EXE = IS_WIN ? ".exe" : "";
-/** Install commands suggested to the user (winget on Windows, Homebrew on macOS). */
+/** Install commands suggested to the user (winget on Windows, Homebrew on macOS, apt on Linux). */
 export const INSTALL = IS_WIN
   ? { go: "winget install GoLang.Go", python: "winget install Python.Python.3.13", git: "winget install Git.Git", pg: "winget install PostgreSQL.PostgreSQL", mysql: "winget install Oracle.MySQL" }
-  : { go: "brew install go", python: "brew install python", git: "xcode-select --install", pg: "brew install libpq", mysql: "brew install mysql-client" };
+  : IS_LINUX
+    ? { go: "sudo apt install golang-go", python: "sudo apt install python3 python3-venv", git: "sudo apt install git", pg: "sudo apt install postgresql-client", mysql: "sudo apt install mysql-client" }
+    : { go: "brew install go", python: "brew install python", git: "xcode-select --install", pg: "brew install libpq", mysql: "brew install mysql-client" };
 /** Label of the "reveal in file manager" action. */
 export const REVEAL_LABEL = IS_MAC ? "Mostrar no Finder" : IS_WIN ? "Abrir no Explorer" : "Abrir no gerenciador de arquivos";
 

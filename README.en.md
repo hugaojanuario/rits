@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/hugaojanuario/rits/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/hugaojanuario/rits?label=release&color=A08CFF"></a>
-  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%20Apple%20Silicon-555">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%20Apple%20Silicon%20%7C%20Linux%20x64-555">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
@@ -23,6 +23,7 @@
 <p align="center">
   <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe">Download Windows x64</a> ·
   <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-macos-arm64.dmg">Download macOS Apple Silicon</a> ·
+  <a href="https://github.com/hugaojanuario/rits/releases/latest/download/Rits-linux-x64.AppImage">Download Linux x64</a> ·
   <a href="https://github.com/hugaojanuario/rits/releases/latest">Releases</a>
 </p>
 
@@ -215,6 +216,16 @@ brew install python go libpq mysql-client
 [Download the Windows x64 installer](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-windows-x64-setup.exe) and run it. WebView2 is installed automatically if needed. The [release page](https://github.com/hugaojanuario/rits/releases/latest) also includes `SHA256SUMS.txt` to verify downloads.
 
 Plugins also find tools in the standard npm and WinGet folders, including tools installed after opening the IDE. Docker Desktop may be installed for the current user or in Program Files. Infrastructure actions work in PowerShell 5.1 and 7, including filenames with spaces and special characters. Liquid Glass is exclusive to macOS; Windows uses Rits Dark or Rits Light.
+
+### Linux (x64)
+
+Download the [AppImage](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-linux-x64.AppImage) (any distribution: `chmod +x Rits-linux-x64.AppImage` and run it) or the [.deb package](https://github.com/hugaojanuario/rits/releases/latest/download/Rits-linux-x64.deb) for Debian/Ubuntu (`sudo apt install ./Rits-linux-x64.deb`). It needs WebKitGTK 4.1 (Ubuntu 22.04+, Debian 12+, Fedora 38+). Secrets go to the Secret Service (GNOME Keyring or KWallet). Updates are manual on Linux: download the new version. Dictation is not available on Linux.
+
+Language and database tools come from the distribution:
+
+```bash
+sudo apt install python3 python3-venv golang-go git postgresql-client mysql-client
+```
 
 ## Getting started
 

@@ -5,10 +5,12 @@
 // One session at a time for the whole app. The transcript goes to the window that started it as
 // the "speech" event: {kind: "text", text, final} with the full text of the session so far, then
 // {kind: "end"} or {kind: "error", text}.
-use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
+#[cfg(any(target_os = "macos", windows))]
+use tauri::Emitter;
 
-#[derive(Serialize, Clone)]
+#[cfg(any(target_os = "macos", windows))]
+#[derive(serde::Serialize, Clone)]
 pub struct SpeechEvent {
     pub kind: &'static str,
     pub text: String,
@@ -16,6 +18,7 @@ pub struct SpeechEvent {
     pub is_final: bool,
 }
 
+#[cfg(any(target_os = "macos", windows))]
 fn send(app: &AppHandle, owner: &str, kind: &'static str, text: String, is_final: bool) {
     let _ = app.emit_to(owner, "speech", SpeechEvent { kind, text, is_final });
 }

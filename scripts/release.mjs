@@ -19,18 +19,23 @@ if (command === "validate") {
   console.log(`Versão validada: ${argument}`);
 } else if (command === "collect") {
   const platforms = {
-    windows: ["x86_64-pc-windows-msvc", "nsis", `Rits_${version}_x64-setup.exe`, "Rits-windows-x64-setup.exe"],
-    macos: ["aarch64-apple-darwin", "dmg", `Rits_${version}_aarch64.dmg`, "Rits-macos-arm64.dmg"],
+    windows: [["x86_64-pc-windows-msvc", "nsis", `Rits_${version}_x64-setup.exe`, "Rits-windows-x64-setup.exe"]],
+    macos: [["aarch64-apple-darwin", "dmg", `Rits_${version}_aarch64.dmg`, "Rits-macos-arm64.dmg"]],
+    linux: [
+      ["x86_64-unknown-linux-gnu", "appimage", `Rits_${version}_amd64.AppImage`, "Rits-linux-x64.AppImage"],
+      ["x86_64-unknown-linux-gnu", "deb", `Rits_${version}_amd64.deb`, "Rits-linux-x64.deb"],
+    ],
   };
-  const config = platforms[argument];
-  if (!config) throw Error("Plataforma inválida.");
-  const [target, bundle, filename, asset] = config;
-  const directory = join(root, "src-tauri/target", target, "release/bundle", bundle);
-  if (!readdirSync(directory).includes(filename)) throw Error(`Instalador não encontrado: ${filename}`);
+  const configs = platforms[argument];
+  if (!configs) throw Error("Plataforma inválida.");
   const output = join(root, "release-assets");
   mkdirSync(output, { recursive: true });
-  copyFileSync(join(directory, filename), join(output, asset));
-  console.log(`Instalador preparado: ${asset}`);
+  for (const [target, bundle, filename, asset] of configs) {
+    const directory = join(root, "src-tauri/target", target, "release/bundle", bundle);
+    if (!readdirSync(directory).includes(filename)) throw Error(`Instalador não encontrado: ${filename}`);
+    copyFileSync(join(directory, filename), join(output, asset));
+    console.log(`Instalador preparado: ${asset}`);
+  }
 } else {
-  throw Error("Use: node scripts/release.mjs validate <tag> | collect <windows|macos>");
+  throw Error("Use: node scripts/release.mjs validate <tag> | collect <windows|macos|linux>");
 }

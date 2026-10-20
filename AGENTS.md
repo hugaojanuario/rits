@@ -6,7 +6,7 @@ Este arquivo explica **o que é o projeto, como ele está organizado, como rodar
 
 ## 1. O que é o Rits
 
-Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados**, infraestrutura (Docker, Terraform, Kubernetes), orquestração e transformação (Apache Airflow, dbt e Jupyter, como plugins), auditoria de migrações (Migration Audit) e um assistente de IA (Claude Code ou Codex do próprio usuário, com o contexto da IDE). Roda no Windows 11 e no macOS (Apple Silicon). Veja a seção 3.1 para o que muda no macOS.
+Rits é uma IDE desktop leve **para engenharia de dados**: **Python**, **Go**, **bancos de dados**, infraestrutura (Docker, Terraform, Kubernetes), orquestração e transformação (Apache Airflow, dbt e Jupyter, como plugins), auditoria de migrações (Migration Audit) e um assistente de IA (Claude Code ou Codex do próprio usuário, com o contexto da IDE). Roda no Windows 11, no macOS (Apple Silicon) e no Linux x64. Veja as seções 3.1 e 3.2 para o que muda no macOS e no Linux.
 
 - **Visual**: layout próprio **Blocos** (temas Rits Escuro/Claro): barra de título com o logo (menu principal), as abas do editor, o widget de execução e botões de layout; tool windows em **cartões** arredondados (esquerdo, direito e inferior) com um seletor segmentado; uma aba fixa "Início" com a tela de início do projeto e a barra de comando; barra de status discreta. O acento é o lilás do logo (`#A08CFF`; `#6B55E0` no tema claro).
 - **Código**: editor CodeMirror 6 com servidores de linguagem (LSP), execução, testes, depuração (DAP), terminal real (PTY), Git e navegação no estilo IntelliJ.
@@ -71,12 +71,23 @@ O que é específico do macOS:
 - **Instalação e quarentena**: o app tem assinatura ad-hoc, sem notarização. `scripts/install-macos.sh` (o `curl … | bash` do README) baixa o DMG da última release, copia o `Rits.app` para `/Applications` com `ditto` e roda `xattr -dr com.apple.quarantine`. Na IDE, `macos_quarantine_status` (`ide.rs`) detecta o atributo e a App Translocation, e `macos.ts` avisa com o comando pronto para copiar. As variáveis `RITS_APP` e `RITS_NO_OPEN` servem para testar o script sem mexer no app instalado.
 - **Banco**: `tools.rs` procura `pg_dump`/`mysqldump` em `/opt/homebrew/opt/{postgresql@*,libpq,mysql*,mariadb*}/bin`, no Postgres.app e em `/Library/PostgreSQL`.
 
+### 3.2 Linux (x64)
+Pré-requisitos (Ubuntu/Debian): `sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libdbus-1-dev libxdo-dev`, Rust e Node. `npm run tauri build` gera `bundle/deb/Rits_<versão>_amd64.deb` e `bundle/appimage/Rits_<versão>_amd64.AppImage`.
+
+O que é específico do Linux:
+- **`src-tauri/tauri.linux.conf.json`** troca o alvo para `deb`/`appimage`. A janela é a mesma do Windows (sem moldura, com os `.win-controls` do app). O release é gerado no Ubuntu 22.04 para funcionar em distribuições com glibc mais antiga.
+- **Segredos**: o `keyring` usa o Secret Service (GNOME Keyring/KWallet) via D-Bus (features `sync-secret-service` e `crypto-rust`, só no alvo Linux no `Cargo.toml`). Sem essas features, o `keyring` guarda os segredos só em memória.
+- **PATH**: como no macOS, `procs::adopt_login_shell_path()` lê o PATH do shell de login (o app aberto pelo menu do desktop não lê o `.bashrc`). `default_tool_dirs()` inclui `/home/linuxbrew/.linuxbrew/bin` e `/snap/bin`; `tools.rs` procura `pg_dump` em `/usr/lib/postgresql/*/bin` e `/usr/pgsql-*/bin`.
+- **Frontend**: `IS_LINUX` em `host.ts` (sugestões de instalação com `apt`). "Abrir no gerenciador de arquivos" usa `xdg-open`.
+- **Sem suporte**: ditado do Assistente IA (`speech.rs` devolve erro) e atualização automática (`asset_name()` é `None`; o usuário baixa a versão nova).
+- **Build pelo macOS**: `docker run --platform linux/amd64` com `ubuntu:22.04`, as dependências acima e `APPIMAGE_EXTRACT_AND_RUN=1` (o linuxdeploy é um AppImage e não há FUSE no container). Rode `npm ci` dentro do container: o `node_modules` do Mac tem binários nativos do macOS.
+
 ### Releases no GitHub
 A versão deve coincidir em `package.json`, nas duas entradas do `package-lock.json`, em `src-tauri/Cargo.toml`, no pacote `rits` do `Cargo.lock` e no `tauri.conf.json`. Depois de commitar na `main`, crie e envie uma tag `v<versão>` (ex.: `git tag -a v0.3.0 -m "Rits 0.3.0"` e `git push origin main v0.3.0`).
 
-`.github/workflows/release.yml` valida a tag com `scripts/release.mjs validate`, exige que o commit pertença à `main`, roda o build TypeScript e os testes Rust e gera instaladores em runners nativos Windows x64 e macOS Apple Silicon. `scripts/release.mjs collect` copia os bundles para os nomes estáveis `Rits-windows-x64-setup.exe` e `Rits-macos-arm64.dmg`. Somente depois de ambos passarem, o job de publicação envia os arquivos e `SHA256SUMS.txt` para um rascunho e publica a release. O token recebe escrita apenas nesse job. Os READMEs usam os links `releases/latest/download/<nome>`.
+`.github/workflows/release.yml` valida a tag com `scripts/release.mjs validate`, exige que o commit pertença à `main`, roda o build TypeScript e os testes Rust e gera instaladores em runners nativos Windows x64, macOS Apple Silicon e Linux x64 (Ubuntu 22.04). `scripts/release.mjs collect` copia os bundles para os nomes estáveis `Rits-windows-x64-setup.exe`, `Rits-macos-arm64.dmg`, `Rits-linux-x64.AppImage` e `Rits-linux-x64.deb`. Somente depois de todos passarem, o job de publicação envia os arquivos e `SHA256SUMS.txt` para um rascunho e publica a release. O token recebe escrita apenas nesse job. Os READMEs usam os links `releases/latest/download/<nome>`.
 
-`.github/workflows/ci.yml` roda em todo push e pull request, no Windows e no macOS: `npm run build` (tsc + Vite), o smoke de comandos do PowerShell (Windows), `npm run tauri build -- --debug --no-bundle` e `cargo test`, com `RUSTFLAGS=-D warnings`. É a garantia de que o que foi feito num sistema compila e passa no outro: confira o CI antes de criar a tag.
+`.github/workflows/ci.yml` roda em todo push e pull request, no Windows, no macOS e no Linux: `npm run build` (tsc + Vite), o smoke de comandos do PowerShell (Windows), `npm run tauri build -- --debug --no-bundle` e `cargo test`, com `RUSTFLAGS=-D warnings`. É a garantia de que o que foi feito num sistema compila e passa no outro: confira o CI antes de criar a tag.
 
 As notas ficam em `.github/release-notes.md`: atualize para cada versão. Para repetir uma execução que falhou, use Re-run jobs ou o `workflow_dispatch` com a mesma tag existente; uma release já publicada não é sobrescrita. O Mac continua com assinatura ad-hoc, sem notarização. Saídas locais de staging ficam em `release-assets/` (ignorado pelo Git).
 
@@ -196,6 +207,7 @@ src/
 src-tauri/
   tauri.conf.json          productName "Rits", identifier "dev.rits.ide", janela sem moldura
   tauri.macos.conf.json    sobreposição do macOS: app/dmg, barra Overlay, Liquid Glass (seção 3.1)
+  tauri.linux.conf.json    sobreposição do Linux: deb/AppImage (seção 3.2)
   Info.plist, Entitlements.plist  descrições de uso do microfone e da fala e a entitlement de áudio do macOS (ditado, 5.13)
   capabilities/default.json permissões (janelas "main" e "project-*"; window controls; criar webview; dialog)
   src/main.rs              chama rits_lib::run()
