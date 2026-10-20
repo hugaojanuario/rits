@@ -1,6 +1,6 @@
 //! Update check: version comparison, asset selection and checksum parsing; `github_latest`
 //! (`--ignored`, needs network) asks the real GitHub API.
-use rits_lib::updater::{expected_sum, info_from_release, is_newer, parse_version};
+use rits_lib::updater::{asset_name, expected_sum, info_from_release, is_newer, parse_version};
 use serde_json::json;
 
 #[test]
@@ -25,9 +25,13 @@ fn release_json_and_checksums() {
         ]
     });
     let i = info_from_release("0.4.2", &rel);
-    assert!(i.available && i.supported);
+    assert!(i.available);
     assert_eq!(i.sums_url, "https://x/sums");
-    assert!(i.asset_url.ends_with(if cfg!(windows) { "/win" } else { "/mac" }));
+    // Linux has no automatic update: the release is offered, but not installed by the app.
+    assert_eq!(i.supported, asset_name().is_some());
+    if i.supported {
+        assert!(i.asset_url.ends_with(if cfg!(windows) { "/win" } else { "/mac" }));
+    }
     let same = info_from_release("9.9.9", &rel);
     assert!(!same.available, "na versão mais nova não oferece atualização");
     let pre = info_from_release("0.1.0", &json!({"tag_name": "v9.9.9", "prerelease": true, "assets": []}));
